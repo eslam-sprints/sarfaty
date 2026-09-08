@@ -117,7 +117,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ],
           const SizedBox(height: 16),
           ListTile(
-            tileColor: Colors.white,
+            tileColor: Theme.of(context).colorScheme.surfaceContainer,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),

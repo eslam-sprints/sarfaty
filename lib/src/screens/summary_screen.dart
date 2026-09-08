@@ -19,9 +19,11 @@ class SummaryScreen extends StatelessWidget {
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'نظرة سريعة على نمط مصروفاتك',
-          style: TextStyle(color: Colors.black54),
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 20),
         MetricCard(
@@ -34,6 +36,12 @@ class SummaryScreen extends StatelessWidget {
           value: store.topCategory?.label ?? 'لا يوجد',
           icon: store.topCategory?.icon ?? Icons.category_outlined,
           tint: store.topCategory?.color ?? Colors.grey,
+        ),
+        MetricCard(
+          label: 'سداد البطاقات هذا الشهر',
+          value: money(store.monthlyPayments),
+          icon: Icons.credit_score_rounded,
+          tint: const Color(0xFF0369A1),
         ),
         const SizedBox(height: 8),
         Card(
@@ -68,7 +76,7 @@ class SummaryScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Card(
-          color: const Color(0xFFFFF7ED),
+          color: Theme.of(context).colorScheme.secondaryContainer,
           child: const Padding(
             padding: EdgeInsets.all(16),
             child: Row(
@@ -77,7 +85,7 @@ class SummaryScreen extends StatelessWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'البيانات محفوظة محلياً في الذاكرة حالياً. البنية جاهزة لإضافة التخزين الدائم وإشعارات النظام في المرحلة التالية.',
+                    'البيانات محفوظة محلياً بشكل دائم. يمكنك تصدير نسخة احتياطية من شاشة الإعدادات.',
                   ),
                 ),
               ],

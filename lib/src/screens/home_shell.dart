@@ -4,6 +4,7 @@ import 'add_expense_screen.dart';
 import 'cards_screen.dart';
 import 'dashboard_screen.dart';
 import 'summary_screen.dart';
+import 'settings_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.store});
@@ -25,6 +26,7 @@ class _HomeShellState extends State<HomeShell> {
             DashboardScreen(store: widget.store, onAdd: _add),
             CardsScreen(store: widget.store),
             SummaryScreen(store: widget.store),
+            SettingsScreen(store: widget.store),
           ],
         ),
       ),
@@ -46,6 +48,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: Icon(Icons.pie_chart_outline),
             selectedIcon: Icon(Icons.pie_chart_rounded),
             label: 'الملخص',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings_rounded),
+            label: 'الإعدادات',
           ),
         ],
       ),

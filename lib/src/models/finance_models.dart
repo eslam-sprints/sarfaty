@@ -37,6 +37,25 @@ class Expense {
   final DateTime date;
   final String? cardId;
   final String? note;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'amount': amount,
+    'category': category.name,
+    'method': method.name,
+    'date': date.toIso8601String(),
+    'cardId': cardId,
+    'note': note,
+  };
+  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
+    id: json['id'] as String,
+    amount: (json['amount'] as num).toDouble(),
+    category: ExpenseCategory.values.byName(json['category'] as String),
+    method: PaymentMethod.values.byName(json['method'] as String),
+    date: DateTime.parse(json['date'] as String),
+    cardId: json['cardId'] as String?,
+    note: json['note'] as String?,
+  );
 }
 
 class CreditCardAccount {
@@ -56,6 +75,26 @@ class CreditCardAccount {
   final int dueDay;
   final double openingDue;
   double paid;
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'limit': limit,
+    'statementDay': statementDay,
+    'dueDay': dueDay,
+    'openingDue': openingDue,
+    'paid': paid,
+  };
+  factory CreditCardAccount.fromJson(Map<String, dynamic> json) =>
+      CreditCardAccount(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        limit: (json['limit'] as num).toDouble(),
+        statementDay: json['statementDay'] as int,
+        dueDay: json['dueDay'] as int,
+        openingDue: (json['openingDue'] as num?)?.toDouble() ?? 0,
+        paid: (json['paid'] as num?)?.toDouble() ?? 0,
+      );
 }
 
 class PaymentRecord {
@@ -67,4 +106,15 @@ class PaymentRecord {
   final String cardId;
   final double amount;
   final DateTime date;
+
+  Map<String, Object?> toJson() => {
+    'cardId': cardId,
+    'amount': amount,
+    'date': date.toIso8601String(),
+  };
+  factory PaymentRecord.fromJson(Map<String, dynamic> json) => PaymentRecord(
+    cardId: json['cardId'] as String,
+    amount: (json['amount'] as num).toDouble(),
+    date: DateTime.parse(json['date'] as String),
+  );
 }

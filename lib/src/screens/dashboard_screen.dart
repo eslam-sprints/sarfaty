@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
+import 'transactions_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, required this.store, required this.onAdd});
@@ -40,9 +41,13 @@ class DashboardScreen extends StatelessWidget {
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                        const Text(
+                        Text(
                           'خلّي فلوسك أوضح وأسهل',
-                          style: TextStyle(color: Colors.black54),
+                          style: TextStyle(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
@@ -115,8 +120,13 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                   TextButton(
-                    onPressed: onAdd,
-                    child: const Text('إضافة جديدة'),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TransactionsScreen(store: store),
+                      ),
+                    ),
+                    child: const Text('عرض الكل'),
                   ),
                 ],
               ),

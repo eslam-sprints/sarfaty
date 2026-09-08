@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sarfaty/src/models/finance_models.dart';
 import 'package:sarfaty/src/state/finance_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('cash expense reduces available balance', () {
     final store = FinanceStore(startingBalance: 1000);
     store.addExpense(
@@ -43,7 +45,7 @@ void main() {
       openingDue: 250,
     );
     final store = FinanceStore(startingBalance: 1000, cards: [card]);
-    expect(store.payCard(card), isTrue);
+    expect(store.payCard(card, 250), isTrue);
     expect(store.cardDue(card), 0);
     expect(store.availableBalance, 750);
   });
@@ -57,7 +59,35 @@ void main() {
       openingDue: 500,
     );
     final store = FinanceStore(startingBalance: 100, cards: [card]);
-    expect(store.payCard(card), isFalse);
+    expect(store.payCard(card, 500), isFalse);
     expect(store.cardDue(card), 500);
+  });
+  test('partial payment reduces due and available balance', () {
+    final card = CreditCardAccount(
+      id: 'c',
+      name: 'test',
+      limit: 1000,
+      statementDay: 20,
+      dueDay: 8,
+      openingDue: 500,
+    );
+    final store = FinanceStore(startingBalance: 1000, cards: [card]);
+    expect(store.payCard(card, 200), isTrue);
+    expect(store.cardDue(card), 300);
+    expect(store.availableBalance, 800);
+    expect(store.payments.single.amount, 200);
+  });
+  test('backup round-trip preserves all data', () {
+    final original = FinanceStore.seeded();
+    final restored = FinanceStore.fromBackupJson(original.exportJson());
+    expect(restored.startingBalance, original.startingBalance);
+    expect(restored.expenses.length, original.expenses.length);
+    expect(restored.cards.length, original.cards.length);
+  });
+  test('invalid backup is rejected', () {
+    expect(
+      () => FinanceStore.fromBackupJson('{"schemaVersion":99}'),
+      throwsFormatException,
+    );
   });
 }

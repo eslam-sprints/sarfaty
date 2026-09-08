@@ -28,9 +28,9 @@ class CardsScreen extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 6),
-      const Text(
+      Text(
         'تابع الاستخدام والمبالغ المستحقة',
-        style: TextStyle(color: Colors.black54),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
       const SizedBox(height: 20),
       if (store.cards.isEmpty)
@@ -138,26 +138,15 @@ class _CardPanel extends StatelessWidget {
                       ),
                       Text(
                         'موعد السداد ${shortDate(store.nextDueDate(card))} • بعد $days يوم',
-                        style: const TextStyle(color: Colors.black54),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 FilledButton.tonal(
-                  onPressed: due <= 0
-                      ? null
-                      : () {
-                          final ok = store.payCard(card);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                ok
-                                    ? 'تم تسجيل سداد البطاقة'
-                                    : 'الرصيد المتاح لا يكفي للسداد',
-                              ),
-                            ),
-                          );
-                        },
+                  onPressed: due <= 0 ? null : () => _showPayment(context, due),
                   child: const Text('سددت البطاقة'),
                 ),
               ],
@@ -200,6 +189,115 @@ class _CardPanel extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _showPayment(BuildContext context, double due) async {
+    final amount = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _PaymentSheet(due: due),
+    );
+    if (amount == null || !context.mounted) return;
+    final ok = store.payCard(card, amount);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'تم تسجيل سداد ${money(amount)}'
+              : 'تعذر السداد؛ تحقق من الرصيد والمبلغ',
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentSheet extends StatefulWidget {
+  const _PaymentSheet({required this.due});
+  final double due;
+  @override
+  State<_PaymentSheet> createState() => _PaymentSheetState();
+}
+
+class _PaymentSheetState extends State<_PaymentSheet> {
+  final key = GlobalKey<FormState>();
+  final controller = TextEditingController();
+  bool full = true;
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      20,
+      20,
+      20,
+      MediaQuery.viewInsetsOf(context).bottom + 24,
+    ),
+    child: Form(
+      key: key,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'تسجيل سداد البطاقة',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 6),
+          Text('المستحق الحالي ${money(widget.due)}'),
+          const SizedBox(height: 16),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('سداد كامل')),
+              ButtonSegment(value: false, label: Text('سداد جزئي')),
+            ],
+            selected: {full},
+            onSelectionChanged: (value) => setState(() => full = value.first),
+          ),
+          if (!full) ...[
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              decoration: const InputDecoration(
+                labelText: 'مبلغ السداد',
+                suffixText: 'ج.م',
+              ),
+              validator: (value) {
+                final amount = double.tryParse(value ?? '');
+                if (amount == null || amount <= 0) return 'أدخل مبلغاً موجباً';
+                if (amount > widget.due) {
+                  return 'لا يمكن أن يزيد المبلغ عن المستحق';
+                }
+                return null;
+              },
+            ),
+          ],
+          const SizedBox(height: 18),
+          FilledButton(
+            onPressed: () {
+              if (!full && !key.currentState!.validate()) return;
+              Navigator.pop(
+                context,
+                full ? widget.due : double.parse(controller.text),
+              );
+            },
+            child: const Text('تأكيد السداد'),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _LabelValue extends StatelessWidget {
@@ -209,7 +307,13 @@ class _LabelValue extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
       const SizedBox(height: 3),
       Text(
         value,

@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/finance_models.dart';
 
 class FinanceStore extends ChangeNotifier {
@@ -6,8 +9,28 @@ class FinanceStore extends ChangeNotifier {
     required this.startingBalance,
     List<Expense>? expenses,
     List<CreditCardAccount>? cards,
+    List<PaymentRecord>? payments,
+    this.themePreference = 'system',
   }) : expenses = expenses ?? [],
-       cards = cards ?? [];
+       cards = cards ?? [],
+       payments = payments ?? [];
+
+  static const _storageKey = 'sarfaty_backup_v1';
+  static Future<FinanceStore> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_storageKey);
+    if (stored == null) {
+      final store = FinanceStore.seeded();
+      await store._save();
+      return store;
+    }
+    try {
+      return FinanceStore.fromBackupJson(stored);
+    } catch (_) {
+      return FinanceStore.seeded();
+    }
+  }
+
   factory FinanceStore.seeded() {
     final now = DateTime.now();
     final card = CreditCardAccount(
@@ -58,9 +81,10 @@ class FinanceStore extends ChangeNotifier {
     );
   }
   double startingBalance;
+  String themePreference;
   final List<Expense> expenses;
   final List<CreditCardAccount> cards;
-  final List<PaymentRecord> payments = [];
+  final List<PaymentRecord> payments;
   Iterable<Expense> get monthExpenses {
     final now = DateTime.now();
     return expenses.where(
@@ -75,6 +99,12 @@ class FinanceStore extends ChangeNotifier {
   double get creditTotal => monthExpenses
       .where((e) => e.method == PaymentMethod.credit)
       .fold(0, (sum, e) => sum + e.amount);
+  double get monthlyPayments => payments
+      .where((p) {
+        final now = DateTime.now();
+        return p.date.year == now.year && p.date.month == now.month;
+      })
+      .fold(0, (sum, p) => sum + p.amount);
   double get availableBalance =>
       startingBalance -
       cashTotal -
@@ -134,7 +164,7 @@ class FinanceStore extends ChangeNotifier {
         note: note,
       ),
     );
-    notifyListeners();
+    _changed();
   }
 
   void addCard({
@@ -152,17 +182,108 @@ class FinanceStore extends ChangeNotifier {
         dueDay: dueDay,
       ),
     );
-    notifyListeners();
+    _changed();
   }
 
-  bool payCard(CreditCardAccount card) {
-    final amount = cardDue(card);
-    if (amount <= 0 || availableBalance < amount) return false;
+  bool payCard(CreditCardAccount card, double amount) {
+    final due = cardDue(card);
+    if (amount <= 0 || amount > due || availableBalance < amount) return false;
     card.paid += amount;
     payments.add(
       PaymentRecord(cardId: card.id, amount: amount, date: DateTime.now()),
     );
-    notifyListeners();
+    _changed();
     return true;
   }
+
+  String exportJson() => const JsonEncoder.withIndent('  ').convert({
+    'schemaVersion': 1,
+    'exportedAt': DateTime.now().toIso8601String(),
+    'startingBalance': startingBalance,
+    'expenses': expenses.map((e) => e.toJson()).toList(),
+    'cards': cards.map((c) => c.toJson()).toList(),
+    'payments': payments.map((p) => p.toJson()).toList(),
+    'settings': {'currency': 'EGP', 'locale': 'ar', 'theme': themePreference},
+  });
+
+  factory FinanceStore.fromBackupJson(String source) {
+    final decoded = jsonDecode(source);
+    if (decoded is! Map<String, dynamic> || decoded['schemaVersion'] != 1) {
+      throw const FormatException('نسخة احتياطية غير مدعومة');
+    }
+    final balance = decoded['startingBalance'];
+    final expenseData = decoded['expenses'];
+    final cardData = decoded['cards'];
+    final paymentData = decoded['payments'];
+    if (balance is! num ||
+        expenseData is! List ||
+        cardData is! List ||
+        paymentData is! List) {
+      throw const FormatException('بيانات النسخة الاحتياطية ناقصة');
+    }
+    final settings = decoded['settings'];
+    final theme = settings is Map ? settings['theme'] : null;
+    final store = FinanceStore(
+      startingBalance: balance.toDouble(),
+      themePreference:
+          theme is String && {'system', 'light', 'dark'}.contains(theme)
+          ? theme
+          : 'system',
+      expenses: expenseData
+          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      cards: cardData
+          .map(
+            (e) =>
+                CreditCardAccount.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList(),
+      payments: paymentData
+          .map(
+            (e) => PaymentRecord.fromJson(Map<String, dynamic>.from(e as Map)),
+          )
+          .toList(),
+    );
+    final cardIds = store.cards.map((c) => c.id).toSet();
+    if (store.expenses.any(
+          (e) =>
+              e.method == PaymentMethod.credit &&
+              (e.cardId == null || !cardIds.contains(e.cardId)),
+        ) ||
+        store.payments.any((p) => !cardIds.contains(p.cardId))) {
+      throw const FormatException('تحتوي النسخة على مراجع بطاقات غير صحيحة');
+    }
+    return store;
+  }
+
+  Future<void> importJson(String source) async {
+    final imported = FinanceStore.fromBackupJson(source);
+    startingBalance = imported.startingBalance;
+    themePreference = imported.themePreference;
+    expenses
+      ..clear()
+      ..addAll(imported.expenses);
+    cards
+      ..clear()
+      ..addAll(imported.cards);
+    payments
+      ..clear()
+      ..addAll(imported.payments);
+    await _save();
+    notifyListeners();
+  }
+
+  void _changed() {
+    notifyListeners();
+    _save();
+  }
+
+  void setThemePreference(String value) {
+    if (!{'system', 'light', 'dark'}.contains(value)) return;
+    themePreference = value;
+    _changed();
+  }
+
+  Future<void> _save() async => (await SharedPreferences.getInstance())
+      .setString(_storageKey, exportJson());
 }

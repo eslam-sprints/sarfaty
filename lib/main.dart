@@ -2,4 +2,7 @@ import 'package:flutter/material.dart';
 import 'src/app.dart';
 import 'src/state/finance_store.dart';
 
-void main() => runApp(SarfatyApp(store: FinanceStore.seeded()));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(SarfatyApp(store: await FinanceStore.load()));
+}
