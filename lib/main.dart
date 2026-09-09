@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'src/app.dart';
 import 'src/state/finance_store.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(SarfatyApp(store: await FinanceStore.load()));
+  // Show Flutter splash immediately while SQLite initializes — no artificial delay.
+  runApp(SarfatyApp(storeLoader: FinanceStore.load));
 }

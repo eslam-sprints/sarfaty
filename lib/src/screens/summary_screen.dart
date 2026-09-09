@@ -105,7 +105,8 @@ class _PaymentLine extends StatelessWidget {
     required this.color,
   });
   final String label;
-  final double value, ratio;
+  final int value;
+  final double ratio;
   final Color color;
   @override
   Widget build(BuildContext context) => Column(

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../data/money.dart';
+import '../data/time_codec.dart';
+
 enum PaymentMethod { cash, credit }
 
 enum ExpenseCategory {
@@ -31,28 +34,34 @@ class Expense {
     this.note,
   });
   final String id;
-  final double amount;
+
+  /// Amount in piastres (قروش).
+  final int amount;
   final ExpenseCategory category;
   final PaymentMethod method;
+
+  /// Local **date-only** calendar day the user chose (see [time_codec]).
   final DateTime date;
   final String? cardId;
   final String? note;
 
+  /// JSON keeps pound decimals for schemaVersion 1 compatibility.
+  /// Expense [date] is date-only `YYYY-MM-DD`, not an instant.
   Map<String, Object?> toJson() => {
     'id': id,
-    'amount': amount,
+    'amount': piastresToPounds(amount),
     'category': category.name,
     'method': method.name,
-    'date': date.toIso8601String(),
+    'date': encodeLocalDateToJson(date),
     'cardId': cardId,
     'note': note,
   };
   factory Expense.fromJson(Map<String, dynamic> json) => Expense(
     id: json['id'] as String,
-    amount: (json['amount'] as num).toDouble(),
+    amount: poundsToPiastres(json['amount'] as num),
     category: ExpenseCategory.values.byName(json['category'] as String),
     method: PaymentMethod.values.byName(json['method'] as String),
-    date: DateTime.parse(json['date'] as String),
+    date: decodeLocalDateFromJson(json['date'] as String),
     cardId: json['cardId'] as String?,
     note: json['note'] as String?,
   );
@@ -70,30 +79,37 @@ class CreditCardAccount {
   });
   final String id;
   final String name;
-  final double limit;
+
+  /// Credit limit in piastres.
+  final int limit;
   final int statementDay;
   final int dueDay;
-  final double openingDue;
-  double paid;
 
+  /// Opening due in piastres.
+  final int openingDue;
+
+  /// Paid total in piastres.
+  int paid;
+
+  /// JSON keeps pound decimals for schemaVersion 1 compatibility.
   Map<String, Object?> toJson() => {
     'id': id,
     'name': name,
-    'limit': limit,
+    'limit': piastresToPounds(limit),
     'statementDay': statementDay,
     'dueDay': dueDay,
-    'openingDue': openingDue,
-    'paid': paid,
+    'openingDue': piastresToPounds(openingDue),
+    'paid': piastresToPounds(paid),
   };
   factory CreditCardAccount.fromJson(Map<String, dynamic> json) =>
       CreditCardAccount(
         id: json['id'] as String,
         name: json['name'] as String,
-        limit: (json['limit'] as num).toDouble(),
+        limit: poundsToPiastres(json['limit'] as num),
         statementDay: json['statementDay'] as int,
         dueDay: json['dueDay'] as int,
-        openingDue: (json['openingDue'] as num?)?.toDouble() ?? 0,
-        paid: (json['paid'] as num?)?.toDouble() ?? 0,
+        openingDue: poundsToPiastres(json['openingDue'] as num? ?? 0),
+        paid: poundsToPiastres(json['paid'] as num? ?? 0),
       );
 }
 
@@ -104,17 +120,65 @@ class PaymentRecord {
     required this.date,
   });
   final String cardId;
-  final double amount;
+
+  /// Amount in piastres.
+  final int amount;
+
+  /// Payment **instant** (UTC in storage/JSON; local for calendar math).
   final DateTime date;
 
+  /// JSON keeps pound decimals for schemaVersion 1 compatibility.
+  /// Payment [date] is a UTC instant (`…Z`).
   Map<String, Object?> toJson() => {
     'cardId': cardId,
-    'amount': amount,
-    'date': date.toIso8601String(),
+    'amount': piastresToPounds(amount),
+    'date': encodeInstantToUtcIso(date),
   };
   factory PaymentRecord.fromJson(Map<String, dynamic> json) => PaymentRecord(
     cardId: json['cardId'] as String,
-    amount: (json['amount'] as num).toDouble(),
-    date: DateTime.parse(json['date'] as String),
+    amount: poundsToPiastres(json['amount'] as num),
+    date: decodeInstantFromJson(json['date'] as String),
   );
+}
+
+class TransactionItem {
+  const TransactionItem({
+    required this.amount,
+    required this.date,
+    this.expense,
+    this.payment,
+  });
+  final int amount;
+  final DateTime date;
+  final Expense? expense;
+  final PaymentRecord? payment;
+  bool get isExpense => expense != null;
+}
+
+class TransactionPage {
+  const TransactionPage({
+    required this.items,
+    required this.totalCount,
+    required this.totalAmount,
+  });
+  final List<TransactionItem> items;
+  final int totalCount;
+  final int totalAmount;
+}
+
+class TransactionFilter {
+  const TransactionFilter({
+    this.method,
+    this.category,
+    this.cardId,
+    this.period,
+    this.offset = 0,
+    this.limit = 20,
+  });
+  final PaymentMethod? method;
+  final ExpenseCategory? category;
+  final String? cardId;
+  final DateTimeRange? period;
+  final int offset;
+  final int limit;
 }

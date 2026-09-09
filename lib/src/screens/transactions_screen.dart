@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
+import 'add_expense_screen.dart';
+import 'transaction_tile.dart';
+import 'transaction_filters.dart';
 
 class TransactionsScreen extends StatefulWidget {
   const TransactionsScreen({super.key, required this.store});
@@ -16,229 +19,276 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   String? cardId;
   DateTimeRange? period;
 
-  List<_Transaction> get results {
-    final items = <_Transaction>[
-      ...widget.store.expenses
-          .where((e) {
-            if (method != null && e.method != method) return false;
-            if (category != null && e.category != category) return false;
-            if (cardId != null && e.cardId != cardId) return false;
-            return _inPeriod(e.date);
-          })
-          .map(_Transaction.expense),
-      if (category == null && method != PaymentMethod.cash)
-        ...widget.store.payments
-            .where(
-              (p) =>
-                  (cardId == null || p.cardId == cardId) && _inPeriod(p.date),
-            )
-            .map((p) {
-              final matches = widget.store.cards.where((c) => c.id == p.cardId);
-              return _Transaction.payment(
-                p,
-                matches.isEmpty ? null : matches.first,
-              );
-            }),
-    ]..sort((a, b) => b.date.compareTo(a.date));
-    return items;
+  final _scrollController = ScrollController();
+  static const _pageSize = 20;
+
+  List<TransactionItem> _items = [];
+  int _totalCount = 0;
+  int _totalAmount = 0;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    _loadInitial();
+    widget.store.addListener(_onStoreChanged);
   }
 
-  bool _inPeriod(DateTime date) =>
-      period == null ||
-      (!date.isBefore(period!.start) &&
-          date.isBefore(period!.end.add(const Duration(days: 1))));
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    widget.store.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    // Reload from start when store changes (e.g. expense deleted/added)
+    _loadInitial();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadInitial() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final page = await widget.store.getTransactions(
+        TransactionFilter(
+          method: method,
+          category: category,
+          cardId: cardId,
+          period: period,
+          offset: 0,
+          limit: _pageSize,
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _items = page.items;
+          _totalCount = page.totalCount;
+          _totalAmount = page.totalAmount;
+          _hasMore = page.items.length == _pageSize;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'تعذر تحميل البيانات';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+    try {
+      final page = await widget.store.getTransactions(
+        TransactionFilter(
+          method: method,
+          category: category,
+          cardId: cardId,
+          period: period,
+          offset: _items.length,
+          limit: _pageSize,
+        ),
+      );
+      if (mounted) {
+        setState(() {
+          _items.addAll(page.items);
+          _hasMore = page.items.length == _pageSize;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'تعذر تحميل المزيد من البيانات';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _updateFilter(VoidCallback update) {
+    setState(update);
+    _loadInitial();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('كل المصروفات')),
-    body: ListenableBuilder(
-      listenable: widget.store,
-      builder: (context, _) {
-        final items = results;
-        final total = items.fold<double>(0, (sum, item) => sum + item.amount);
-        return Column(
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  DropdownButton<PaymentMethod?>(
-                    value: method,
-                    hint: const Text('طريقة الدفع: الكل'),
-                    items: const [
-                      DropdownMenuItem(value: null, child: Text('الكل')),
-                      DropdownMenuItem(
-                        value: PaymentMethod.cash,
-                        child: Text('كاش'),
+    body: Column(
+      children: [
+        TransactionFilters(
+          store: widget.store,
+          method: method,
+          category: category,
+          cardId: cardId,
+          period: period,
+          onMethodChanged: (v) => _updateFilter(() {
+            method = v;
+            if (v == PaymentMethod.cash) cardId = null;
+          }),
+          onCategoryChanged: (v) => _updateFilter(() => category = v),
+          onCardIdChanged: (v) => _updateFilter(() => cardId = v),
+          onPeriodChanged: (v) => _updateFilter(() => period = v),
+          onClear: () => _updateFilter(() {
+            method = null;
+            category = null;
+            cardId = null;
+            period = null;
+          }),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: MetricCard(
+                  label: 'إجمالي النتائج',
+                  value: money(_totalAmount),
+                  icon: Icons.summarize_outlined,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: MetricCard(
+                  label: 'عدد النتائج',
+                  value: '$_totalCount',
+                  icon: Icons.numbers_rounded,
+                  tint: const Color(0xFF7C3AED),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: _error != null && _items.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        size: 54,
+                        color: Colors.red,
                       ),
-                      DropdownMenuItem(
-                        value: PaymentMethod.credit,
-                        child: Text('كريديت'),
+                      const SizedBox(height: 12),
+                      Text(
+                        _error!,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      TextButton(
+                        onPressed: _loadInitial,
+                        child: const Text('إعادة المحاولة'),
                       ),
                     ],
-                    onChanged: (v) => setState(() {
-                      method = v;
-                      if (v == PaymentMethod.cash) cardId = null;
-                    }),
                   ),
-                  const SizedBox(width: 14),
-                  DropdownButton<ExpenseCategory?>(
-                    value: category,
-                    hint: const Text('كل التصنيفات'),
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('كل التصنيفات'),
+                )
+              : _items.isEmpty && !_isLoading
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.search_off_rounded,
+                        size: 54,
+                        color: Colors.black26,
                       ),
-                      ...ExpenseCategory.values.map(
-                        (c) => DropdownMenuItem(value: c, child: Text(c.label)),
+                      SizedBox(height: 12),
+                      Text(
+                        'لا توجد معاملات تطابق الفلاتر',
+                        style: TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ],
-                    onChanged: (v) => setState(() => category = v),
                   ),
-                  if (method == PaymentMethod.credit) ...[
-                    const SizedBox(width: 14),
-                    DropdownButton<String?>(
-                      value: cardId,
-                      hint: const Text('كل البطاقات'),
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('كل البطاقات'),
+                )
+              : ListView.separated(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  itemCount: _items.length + (_hasMore ? 1 : 0),
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    if (i == _items.length) {
+                      return Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Center(
+                          child: _error != null
+                              ? TextButton(
+                                  onPressed: _loadMore,
+                                  child: const Text('إعادة المحاولة'),
+                                )
+                              : const CircularProgressIndicator(),
                         ),
-                        ...widget.store.cards.map(
-                          (c) => DropdownMenuItem(
-                            value: c.id,
-                            child: Text(c.name),
-                          ),
-                        ),
-                      ],
-                      onChanged: (v) => setState(() => cardId = v),
-                    ),
-                  ],
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: _pickPeriod,
-                    icon: const Icon(Icons.date_range_outlined),
-                    label: Text(
-                      period == null
-                          ? 'كل التواريخ'
-                          : '${shortDate(period!.start)} — ${shortDate(period!.end)}',
-                    ),
-                  ),
-                  if (method != null ||
-                      category != null ||
-                      cardId != null ||
-                      period != null)
-                    IconButton(
-                      onPressed: () => setState(() {
-                        method = null;
-                        category = null;
-                        cardId = null;
-                        period = null;
-                      }),
-                      tooltip: 'مسح الفلاتر',
-                      icon: const Icon(Icons.filter_alt_off_outlined),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: MetricCard(
-                      label: 'إجمالي النتائج',
-                      value: money(total),
-                      icon: Icons.summarize_outlined,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: MetricCard(
-                      label: 'عدد النتائج',
-                      value: '${items.length}',
-                      icon: Icons.numbers_rounded,
-                      tint: const Color(0xFF7C3AED),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: items.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.search_off_rounded,
-                            size: 54,
-                            color: Colors.black26,
-                          ),
-                          SizedBox(height: 12),
-                          Text(
-                            'لا توجد معاملات تطابق الفلاتر',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      itemCount: items.length,
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (_, i) => items[i].tile,
-                    ),
-            ),
-          ],
-        );
-      },
+                      );
+                    }
+                    return TransactionTile(
+                      item: _items[i],
+                      store: widget.store,
+                      onEdit: _editExpense,
+                      onDelete: _deleteExpense,
+                    );
+                  },
+                ),
+        ),
+      ],
     ),
   );
 
-  Future<void> _pickPeriod() async {
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: period,
+  Future<void> _editExpense(Expense expense) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AddExpenseScreen(store: widget.store, expense: expense),
+      ),
     );
-    if (picked != null) setState(() => period = picked);
   }
-}
 
-class _Transaction {
-  _Transaction(this.amount, this.date, this.tile);
-  factory _Transaction.expense(Expense e) =>
-      _Transaction(e.amount, e.date, ExpenseTile(expense: e));
-  factory _Transaction.payment(PaymentRecord p, CreditCardAccount? card) =>
-      _Transaction(
-        p.amount,
-        p.date,
-        ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-          leading: const CircleAvatar(
-            backgroundColor: Color(0xFFE0F2FE),
-            child: Icon(Icons.credit_score_rounded, color: Color(0xFF0369A1)),
-          ),
-          title: Text(
-            'سداد ${card?.name ?? 'بطاقة'}',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          subtitle: Text('سداد كريديت • ${shortDate(p.date)}'),
-          trailing: Text(
-            '- ${money(p.amount)}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF0369A1),
-            ),
-          ),
+  Future<void> _deleteExpense(Expense expense) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف المصروف؟'),
+        content: Text(
+          'سيتم حذف ${money(expense.amount)} وتحديث الرصيد والملخص تلقائيًا.',
         ),
-      );
-  final double amount;
-  final DateTime date;
-  final Widget tile;
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.store.deleteExpense(expense.id);
+    } on PersistenceException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('تم حذف المصروف وتحديث البيانات')),
+    );
+  }
 }

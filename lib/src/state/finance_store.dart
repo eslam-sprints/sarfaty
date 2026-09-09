@@ -1,133 +1,149 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../data/local_database.dart';
+import '../data/money.dart';
+import '../data/time_codec.dart';
 import '../models/finance_models.dart';
 
+part 'finance_store_mutations.dart';
+part 'finance_store_backup.dart';
+
+/// Thrown when a SQLite write fails after validation succeeded.
+class PersistenceException implements Exception {
+  const PersistenceException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+typedef Clock = DateTime Function();
+
 class FinanceStore extends ChangeNotifier {
+  static Future<FinanceStore> load({Clock? clock}) async {
+    final database = await LocalDatabase.open();
+    final c = clock ?? DateTime.now;
+    final now = c();
+    final today = localDateOnly(now);
+    final monthStart = DateTime(today.year, today.month, 1);
+    final monthEnd = DateTime(today.year, today.month + 1, 0);
+
+    final snapshot = await database.readAll(
+      monthStart: monthStart,
+      monthEnd: monthEnd,
+    );
+    return FinanceStore._fromSnapshot(snapshot, database, c);
+  }
+
+  factory FinanceStore.seeded({Clock? clock}) {
+    return FinanceStore(startingBalance: 0, clock: clock);
+  }
+
+  FinanceStore._fromSnapshot(
+    DatabaseSnapshot snapshot,
+    FinanceDatabase database,
+    Clock clock,
+  ) : startingBalance = snapshot.startingBalance,
+      themePreference = snapshot.themePreference,
+      onboardingCompleted = snapshot.onboardingCompleted,
+      cards = snapshot.cards,
+      recentExpenses = snapshot.recentExpenses,
+      _monthExpenses = snapshot.monthExpenses,
+      _monthPayments = snapshot.monthPayments,
+      cardExpensesTotal = snapshot.cardExpensesTotal,
+      allPaymentsTotal = snapshot.allPaymentsTotal,
+      _database = database,
+      _clock = clock {
+    _calculateAggregates();
+  }
+
   FinanceStore({
     required this.startingBalance,
-    List<Expense>? expenses,
     List<CreditCardAccount>? cards,
-    List<PaymentRecord>? payments,
     this.themePreference = 'system',
-  }) : expenses = expenses ?? [],
-       cards = cards ?? [],
-       payments = payments ?? [];
-
-  static const _storageKey = 'sarfaty_backup_v1';
-  static Future<FinanceStore> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(_storageKey);
-    if (stored == null) {
-      final store = FinanceStore.seeded();
-      await store._save();
-      return store;
-    }
-    try {
-      return FinanceStore.fromBackupJson(stored);
-    } catch (_) {
-      return FinanceStore.seeded();
-    }
+    this.onboardingCompleted = false,
+    FinanceDatabase? database,
+    Clock? clock,
+    @visibleForTesting List<Expense>? monthExpenses,
+    @visibleForTesting List<PaymentRecord>? monthPayments,
+  }) : cards = cards ?? [],
+       recentExpenses = [],
+       _monthExpenses = monthExpenses ?? [],
+       _monthPayments = monthPayments ?? [],
+       cardExpensesTotal = {},
+       allPaymentsTotal = 0,
+       _database = database,
+       _clock = clock ?? DateTime.now {
+    _calculateAggregates();
   }
 
-  factory FinanceStore.seeded() {
-    final now = DateTime.now();
-    final card = CreditCardAccount(
-      id: 'card-1',
-      name: 'بنك مصر •••• 4821',
-      limit: 30000,
-      statementDay: 20,
-      dueDay: 8,
-      openingDue: 1850,
-    );
-    return FinanceStore(
-      startingBalance: 14200,
-      cards: [card],
-      expenses: [
-        Expense(
-          id: 'e1',
-          amount: 245,
-          category: ExpenseCategory.food,
-          method: PaymentMethod.cash,
-          date: now.subtract(const Duration(hours: 3)),
-          note: 'غداء',
-        ),
-        Expense(
-          id: 'e2',
-          amount: 780,
-          category: ExpenseCategory.shopping,
-          method: PaymentMethod.credit,
-          cardId: card.id,
-          date: now.subtract(const Duration(days: 1)),
-          note: 'مستلزمات',
-        ),
-        Expense(
-          id: 'e3',
-          amount: 120,
-          category: ExpenseCategory.transport,
-          method: PaymentMethod.cash,
-          date: now.subtract(const Duration(days: 2)),
-        ),
-        Expense(
-          id: 'e4',
-          amount: 460,
-          category: ExpenseCategory.bills,
-          method: PaymentMethod.credit,
-          cardId: card.id,
-          date: now.subtract(const Duration(days: 4)),
-        ),
-      ],
-    );
-  }
-  double startingBalance;
+  int startingBalance;
   String themePreference;
-  final List<Expense> expenses;
+  bool onboardingCompleted;
   final List<CreditCardAccount> cards;
-  final List<PaymentRecord> payments;
-  Iterable<Expense> get monthExpenses {
-    final now = DateTime.now();
-    return expenses.where(
-      (e) => e.date.year == now.year && e.date.month == now.month,
-    );
+  final List<Expense> recentExpenses;
+  final List<Expense> _monthExpenses;
+  final List<PaymentRecord> _monthPayments;
+  final Map<String, int> cardExpensesTotal;
+  int allPaymentsTotal;
+  final FinanceDatabase? _database;
+  final Clock _clock;
+
+  /// Injected "now" for calendar math and instants (tests pass a fixed clock).
+  DateTime get now => _clock();
+
+  /// Local calendar today (date-only).
+  DateTime get today => localDateOnly(now);
+
+  Iterable<Expense> get monthExpenses => _monthExpenses;
+  Iterable<PaymentRecord> get monthPayments => _monthPayments;
+
+  int monthlyTotal = 0;
+  int cashTotal = 0;
+  int creditTotal = 0;
+  int monthlyPayments = 0;
+  int availableBalance = 0;
+  ExpenseCategory? topCategory;
+
+  void _calculateAggregates() {
+    monthlyTotal = _monthExpenses.fold(0, (sum, e) => sum + e.amount);
+    cashTotal = _monthExpenses
+        .where((e) => e.method == PaymentMethod.cash)
+        .fold(0, (sum, e) => sum + e.amount);
+    creditTotal = _monthExpenses
+        .where((e) => e.method == PaymentMethod.credit)
+        .fold(0, (sum, e) => sum + e.amount);
+    monthlyPayments = _monthPayments
+        .where((p) => isSameLocalMonth(p.date, today))
+        .fold(0, (sum, p) => sum + p.amount);
+
+    availableBalance = startingBalance - cashTotal - allPaymentsTotal;
+
+    if (_monthExpenses.isEmpty) {
+      topCategory = null;
+    } else {
+      final totals = <ExpenseCategory, int>{};
+      for (final e in _monthExpenses) {
+        totals[e.category] = (totals[e.category] ?? 0) + e.amount;
+      }
+      topCategory = totals.entries
+          .reduce((a, b) => a.value >= b.value ? a : b)
+          .key;
+    }
   }
 
-  double get monthlyTotal => monthExpenses.fold(0, (sum, e) => sum + e.amount);
-  double get cashTotal => monthExpenses
-      .where((e) => e.method == PaymentMethod.cash)
-      .fold(0, (sum, e) => sum + e.amount);
-  double get creditTotal => monthExpenses
-      .where((e) => e.method == PaymentMethod.credit)
-      .fold(0, (sum, e) => sum + e.amount);
-  double get monthlyPayments => payments
-      .where((p) {
-        final now = DateTime.now();
-        return p.date.year == now.year && p.date.month == now.month;
-      })
-      .fold(0, (sum, p) => sum + p.amount);
-  double get availableBalance =>
-      startingBalance -
-      cashTotal -
-      payments.fold(0, (sum, p) => sum + p.amount);
-  double get totalCreditDue =>
-      cards.fold(0, (sum, card) => sum + cardDue(card));
-  double cardDue(CreditCardAccount card) =>
-      (card.openingDue +
-              expenses
-                  .where((e) => e.cardId == card.id)
-                  .fold<double>(0, (sum, e) => sum + e.amount) -
-              card.paid)
-          .clamp(0, double.infinity);
+  int get totalCreditDue => cards.fold(0, (sum, card) => sum + cardDue(card));
+  int cardDue(CreditCardAccount card) {
+    final expensesTotal = cardExpensesTotal[card.id] ?? 0;
+    final due = card.openingDue + expensesTotal - card.paid;
+    return due < 0 ? 0 : due;
+  }
+
   double cardUsage(CreditCardAccount card) =>
       card.limit == 0 ? 0 : (cardDue(card) / card.limit).clamp(0, 1);
-  DateTime nextDueDate(CreditCardAccount card) {
-    final now = DateTime.now();
-    var due = DateTime(now.year, now.month, card.dueDay);
-    if (due.isBefore(DateTime(now.year, now.month, now.day))) {
-      due = DateTime(now.year, now.month + 1, card.dueDay);
-    }
-    return due;
-  }
+  DateTime nextDueDate(CreditCardAccount card) =>
+      nextLocalDueDate(today, card.dueDay);
 
   CreditCardAccount? get nearestDueCard {
     final active = cards.where((c) => cardDue(c) > 0).toList()
@@ -135,155 +151,54 @@ class FinanceStore extends ChangeNotifier {
     return active.isEmpty ? null : active.first;
   }
 
-  ExpenseCategory? get topCategory {
-    if (monthExpenses.isEmpty) return null;
-    final totals = <ExpenseCategory, double>{};
-    for (final e in monthExpenses) {
-      totals[e.category] = (totals[e.category] ?? 0) + e.amount;
+  Future<TransactionPage> getTransactions(TransactionFilter filter) async {
+    if (_database == null) {
+      return const TransactionPage(items: [], totalCount: 0, totalAmount: 0);
     }
-    return totals.entries.reduce((a, b) => a.value >= b.value ? a : b).key;
+    return _database.getTransactions(filter);
   }
 
-  void addExpense({
-    required double amount,
-    required ExpenseCategory category,
-    required PaymentMethod method,
-    required DateTime date,
-    String? cardId,
-    String? note,
-  }) {
-    expenses.insert(
-      0,
-      Expense(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        amount: amount,
-        category: category,
-        method: method,
-        date: date,
-        cardId: cardId,
-        note: note,
-      ),
+  @visibleForTesting
+  Future<void> refreshForTesting() => _refresh();
+
+  Future<void> _refresh() async {
+    if (_database == null) return;
+    final monthStart = DateTime(today.year, today.month, 1);
+    final monthEnd = DateTime(today.year, today.month + 1, 0);
+    final snapshot = await _database.readAll(
+      monthStart: monthStart,
+      monthEnd: monthEnd,
     );
-    _changed();
-  }
-
-  void addCard({
-    required String name,
-    required double limit,
-    required int statementDay,
-    required int dueDay,
-  }) {
-    cards.add(
-      CreditCardAccount(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        name: name,
-        limit: limit,
-        statementDay: statementDay,
-        dueDay: dueDay,
-      ),
-    );
-    _changed();
-  }
-
-  bool payCard(CreditCardAccount card, double amount) {
-    final due = cardDue(card);
-    if (amount <= 0 || amount > due || availableBalance < amount) return false;
-    card.paid += amount;
-    payments.add(
-      PaymentRecord(cardId: card.id, amount: amount, date: DateTime.now()),
-    );
-    _changed();
-    return true;
-  }
-
-  String exportJson() => const JsonEncoder.withIndent('  ').convert({
-    'schemaVersion': 1,
-    'exportedAt': DateTime.now().toIso8601String(),
-    'startingBalance': startingBalance,
-    'expenses': expenses.map((e) => e.toJson()).toList(),
-    'cards': cards.map((c) => c.toJson()).toList(),
-    'payments': payments.map((p) => p.toJson()).toList(),
-    'settings': {'currency': 'EGP', 'locale': 'ar', 'theme': themePreference},
-  });
-
-  factory FinanceStore.fromBackupJson(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map<String, dynamic> || decoded['schemaVersion'] != 1) {
-      throw const FormatException('نسخة احتياطية غير مدعومة');
-    }
-    final balance = decoded['startingBalance'];
-    final expenseData = decoded['expenses'];
-    final cardData = decoded['cards'];
-    final paymentData = decoded['payments'];
-    if (balance is! num ||
-        expenseData is! List ||
-        cardData is! List ||
-        paymentData is! List) {
-      throw const FormatException('بيانات النسخة الاحتياطية ناقصة');
-    }
-    final settings = decoded['settings'];
-    final theme = settings is Map ? settings['theme'] : null;
-    final store = FinanceStore(
-      startingBalance: balance.toDouble(),
-      themePreference:
-          theme is String && {'system', 'light', 'dark'}.contains(theme)
-          ? theme
-          : 'system',
-      expenses: expenseData
-          .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList(),
-      cards: cardData
-          .map(
-            (e) =>
-                CreditCardAccount.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
-          .toList(),
-      payments: paymentData
-          .map(
-            (e) => PaymentRecord.fromJson(Map<String, dynamic>.from(e as Map)),
-          )
-          .toList(),
-    );
-    final cardIds = store.cards.map((c) => c.id).toSet();
-    if (store.expenses.any(
-          (e) =>
-              e.method == PaymentMethod.credit &&
-              (e.cardId == null || !cardIds.contains(e.cardId)),
-        ) ||
-        store.payments.any((p) => !cardIds.contains(p.cardId))) {
-      throw const FormatException('تحتوي النسخة على مراجع بطاقات غير صحيحة');
-    }
-    return store;
-  }
-
-  Future<void> importJson(String source) async {
-    final imported = FinanceStore.fromBackupJson(source);
-    startingBalance = imported.startingBalance;
-    themePreference = imported.themePreference;
-    expenses
-      ..clear()
-      ..addAll(imported.expenses);
     cards
       ..clear()
-      ..addAll(imported.cards);
-    payments
+      ..addAll(snapshot.cards);
+    recentExpenses
       ..clear()
-      ..addAll(imported.payments);
-    await _save();
+      ..addAll(snapshot.recentExpenses);
+    _monthExpenses
+      ..clear()
+      ..addAll(snapshot.monthExpenses);
+    _monthPayments
+      ..clear()
+      ..addAll(snapshot.monthPayments);
+    cardExpensesTotal
+      ..clear()
+      ..addAll(snapshot.cardExpensesTotal);
+    allPaymentsTotal = snapshot.allPaymentsTotal;
+    _calculateAggregates();
     notifyListeners();
   }
 
-  void _changed() {
-    notifyListeners();
-    _save();
+  Future<void> _write(Future<void>? persistence, String message) async {
+    if (persistence == null) return;
+    try {
+      await persistence;
+    } catch (_) {
+      throw PersistenceException(message);
+    }
   }
 
-  void setThemePreference(String value) {
-    if (!{'system', 'light', 'dark'}.contains(value)) return;
-    themePreference = value;
-    _changed();
+  factory FinanceStore.fromBackupJson(String source, {Clock? clock}) {
+    return FinanceStoreBackup.fromBackupJson(source, clock: clock);
   }
-
-  Future<void> _save() async => (await SharedPreferences.getInstance())
-      .setString(_storageKey, exportJson());
 }

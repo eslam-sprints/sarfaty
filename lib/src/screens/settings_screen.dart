@@ -56,8 +56,16 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
                 selected: {store.themePreference},
-                onSelectionChanged: (value) =>
-                    store.setThemePreference(value.first),
+                onSelectionChanged: (value) async {
+                  try {
+                    await store.setThemePreference(value.first);
+                  } on PersistenceException catch (error) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(error.message)));
+                  }
+                },
               ),
             ],
           ),
@@ -90,6 +98,26 @@ class SettingsScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_left_rounded),
               onTap: () => _import(context),
             ),
+            const Divider(height: 1, indent: 72),
+            ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.menu_book_rounded)),
+              title: const Text(
+                'إعادة عرض المقدمة',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text('عرض شاشات التعريف مرة أخرى'),
+              trailing: const Icon(Icons.chevron_left_rounded),
+              onTap: () async {
+                try {
+                  await store.resetOnboarding();
+                } on PersistenceException catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error.message)));
+                }
+              },
+            ),
           ],
         ),
       ),
@@ -121,7 +149,7 @@ class SettingsScreen extends StatelessWidget {
       final file = File(
         '${directory.path}/sarfaty-backup-${DateTime.now().millisecondsSinceEpoch}.json',
       );
-      await file.writeAsString(store.exportJson(), flush: true);
+      await file.writeAsString(await store.exportJson(), flush: true);
       await SharePlus.instance.share(
         ShareParams(
           title: 'نسخة صرفتي الاحتياطية',
@@ -179,6 +207,12 @@ class SettingsScreen extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('تم استيراد النسخة الاحتياطية بنجاح')),
         );
+      }
+    } on PersistenceException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } on FormatException catch (error) {
       if (context.mounted) {

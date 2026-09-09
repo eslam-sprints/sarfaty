@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/time_codec.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
 import 'transactions_screen.dart';
@@ -11,6 +12,9 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final dueCard = store.nearestDueCard;
     final dueDate = dueCard == null ? null : store.nextDueDate(dueCard);
+    final daysUntilDue = dueDate == null
+        ? null
+        : localCalendarDaysUntil(store.today, dueDate);
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -97,17 +101,93 @@ class DashboardScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: onAdd,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF0F766E),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text(
+                          'سجّل مصروف جديد',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              MetricCard(
-                label: 'أقرب موعد سداد',
-                value: dueDate == null
-                    ? 'لا توجد مستحقات'
-                    : '${shortDate(dueDate)} • ${dueCard!.name}',
-                icon: Icons.event_available_rounded,
-                tint: const Color(0xFF7C3AED),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(11),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF7C3AED).withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Icon(
+                          Icons.event_available_rounded,
+                          color: Color(0xFF7C3AED),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'أقرب موعد سداد',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              dueDate == null
+                                  ? 'لا توجد مستحقات حاليًا'
+                                  : '${shortDate(dueDate)} • ${dueCard!.name}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (daysUntilDue != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                          child: Text(
+                            daysUntilDue <= 0
+                                ? 'اليوم'
+                                : 'خلال $daysUntilDue يوم',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 22),
               Row(
@@ -136,13 +216,31 @@ class DashboardScreen extends StatelessWidget {
                     horizontal: 14,
                     vertical: 6,
                   ),
-                  child: store.expenses.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Center(child: Text('لا توجد عمليات بعد')),
+                  child: store.recentExpenses.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.receipt_long_outlined,
+                                size: 38,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 10),
+                              const Text('لا توجد عمليات بعد'),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: onAdd,
+                                icon: const Icon(Icons.add_rounded),
+                                label: const Text('أضف أول مصروف'),
+                              ),
+                            ],
+                          ),
                         )
                       : Column(
-                          children: store.expenses
+                          children: store.recentExpenses
                               .take(5)
                               .map((e) => ExpenseTile(expense: e))
                               .toList(),

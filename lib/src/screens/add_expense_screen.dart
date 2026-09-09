@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../data/money.dart';
+import '../data/time_codec.dart';
 import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
 
 class AddExpenseScreen extends StatefulWidget {
-  const AddExpenseScreen({super.key, required this.store});
+  const AddExpenseScreen({super.key, required this.store, this.expense});
   final FinanceStore store;
+  final Expense? expense;
   @override
   State<AddExpenseScreen> createState() => _AddExpenseScreenState();
 }
@@ -17,12 +20,25 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   final note = TextEditingController();
   ExpenseCategory category = ExpenseCategory.food;
   PaymentMethod method = PaymentMethod.cash;
-  DateTime date = DateTime.now();
+  late DateTime date;
   String? cardId;
   @override
   void initState() {
     super.initState();
-    if (widget.store.cards.isNotEmpty) cardId = widget.store.cards.first.id;
+    final expense = widget.expense;
+    if (expense != null) {
+      amount.text = formatPoundsForInput(expense.amount);
+      note.text = expense.note ?? '';
+      category = expense.category;
+      method = expense.method;
+      date = localDateOnly(expense.date);
+      cardId = expense.cardId;
+    } else {
+      date = widget.store.today;
+      if (widget.store.cards.isNotEmpty) {
+        cardId = widget.store.cards.first.id;
+      }
+    }
   }
 
   @override
@@ -34,7 +50,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('إضافة مصروف')),
+    appBar: AppBar(
+      title: Text(widget.expense == null ? 'إضافة مصروف' : 'تعديل المصروف'),
+    ),
     body: Form(
       key: formKey,
       child: ListView(
@@ -59,7 +77,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<ExpenseCategory>(
-            value: category,
+            initialValue: category,
             decoration: const InputDecoration(
               labelText: 'التصنيف',
               prefixIcon: Icon(Icons.category_outlined),
@@ -100,7 +118,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           if (method == PaymentMethod.credit) ...[
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: cardId,
+              initialValue: cardId,
               decoration: const InputDecoration(
                 labelText: 'البطاقة',
                 prefixIcon: Icon(Icons.credit_card),
@@ -129,9 +147,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 context: context,
                 initialDate: date,
                 firstDate: DateTime(2020),
-                lastDate: DateTime.now(),
+                lastDate: widget.store.today,
               );
-              if (picked != null) setState(() => date = picked);
+              if (picked != null) {
+                setState(() => date = localDateOnly(picked));
+              }
             },
           ),
           const SizedBox(height: 16),
@@ -150,25 +170,54 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             ),
             onPressed: _save,
             icon: const Icon(Icons.check_rounded),
-            label: const Text('حفظ المصروف'),
+            label: Text(
+              widget.expense == null ? 'حفظ المصروف' : 'حفظ التعديلات',
+            ),
           ),
         ],
       ),
     ),
   );
-  void _save() {
+  Future<void> _save() async {
     if (!formKey.currentState!.validate()) return;
-    widget.store.addExpense(
-      amount: double.parse(amount.text),
-      category: category,
-      method: method,
-      date: date,
-      cardId: method == PaymentMethod.credit ? cardId : null,
-      note: note.text.trim().isEmpty ? null : note.text.trim(),
-    );
+    final noteValue = note.text.trim().isEmpty ? null : note.text.trim();
+    final existing = widget.expense;
+    try {
+      if (existing == null) {
+        await widget.store.addExpense(
+          amount: double.parse(amount.text),
+          category: category,
+          method: method,
+          date: date,
+          cardId: method == PaymentMethod.credit ? cardId : null,
+          note: noteValue,
+        );
+      } else {
+        await widget.store.updateExpense(
+          id: existing.id,
+          amount: double.parse(amount.text),
+          category: category,
+          method: method,
+          date: date,
+          cardId: method == PaymentMethod.credit ? cardId : null,
+          note: noteValue,
+        );
+      }
+    } on PersistenceException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+    if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('تمت إضافة المصروف')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          existing == null ? 'تمت إضافة المصروف' : 'تم تعديل المصروف',
+        ),
+      ),
+    );
   }
 }

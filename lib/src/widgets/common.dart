@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
+import '../data/money.dart';
+import '../data/time_codec.dart';
 import '../models/finance_models.dart';
 
-String money(double value) =>
-    '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} ج.م';
-String shortDate(DateTime date) => '${date.day}/${date.month}/${date.year}';
+/// Formats piastres for display as pounds (ج.م).
+String money(int piastres) {
+  final value = piastresToPounds(piastres);
+  return '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} ج.م';
+}
+
+/// Displays a **date-only** value using the local calendar day.
+String shortDate(DateTime date) {
+  final local = localDateOnly(date);
+  return '${local.day}/${local.month}/${local.year}';
+}
 
 class MetricCard extends StatelessWidget {
   const MetricCard({
@@ -58,8 +68,9 @@ class MetricCard extends StatelessWidget {
 }
 
 class ExpenseTile extends StatelessWidget {
-  const ExpenseTile({super.key, required this.expense});
+  const ExpenseTile({super.key, required this.expense, this.action});
   final Expense expense;
+  final Widget? action;
   @override
   Widget build(BuildContext context) => ListTile(
     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -76,12 +87,18 @@ class ExpenseTile extends StatelessWidget {
     subtitle: Text(
       '${expense.category.label} • ${expense.method == PaymentMethod.cash ? 'كاش' : 'كريديت'} • ${shortDate(expense.date)}',
     ),
-    trailing: Text(
-      '- ${money(expense.amount)}',
-      style: const TextStyle(
-        fontWeight: FontWeight.w800,
-        color: Color(0xFFB42318),
-      ),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '- ${money(expense.amount)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            color: Color(0xFFB42318),
+          ),
+        ),
+        if (action != null) action!,
+      ],
     ),
   );
 }
