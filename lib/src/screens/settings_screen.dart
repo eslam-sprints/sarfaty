@@ -4,11 +4,17 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../security/biometric_auth.dart';
 import '../state/finance_store.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, required this.store});
+  const SettingsScreen({
+    super.key,
+    required this.store,
+    required this.biometricAuthenticator,
+  });
   final FinanceStore store;
+  final BiometricAuthenticator biometricAuthenticator;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -69,6 +75,19 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Card(
+        child: SwitchListTile(
+          secondary: const CircleAvatar(child: Icon(Icons.fingerprint_rounded)),
+          title: const Text(
+            'قفل التطبيق بالبصمة',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle: const Text('استخدام البصمة أو PIN الجهاز عند فتح صرفتي'),
+          value: store.biometricLockEnabled,
+          onChanged: (enabled) => _setBiometricLock(context, enabled),
         ),
       ),
       const SizedBox(height: 12),
@@ -142,6 +161,32 @@ class SettingsScreen extends StatelessWidget {
       ),
     ],
   );
+
+  Future<void> _setBiometricLock(BuildContext context, bool enabled) async {
+    if (enabled && !await biometricAuthenticator.isAvailable()) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'فعّل بصمة على الجهاز أولاً، ثم حاول تشغيل قفل صرفتي مرة أخرى.',
+          ),
+        ),
+      );
+      return;
+    }
+    try {
+      await store.setBiometricLockEnabled(enabled);
+      if (!context.mounted || enabled) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('تم إيقاف قفل التطبيق')));
+    } on PersistenceException catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
 
   Future<void> _export(BuildContext context) async {
     try {

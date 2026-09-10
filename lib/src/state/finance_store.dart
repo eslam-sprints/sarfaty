@@ -47,6 +47,7 @@ class FinanceStore extends ChangeNotifier {
   ) : startingBalance = snapshot.startingBalance,
       themePreference = snapshot.themePreference,
       onboardingCompleted = snapshot.onboardingCompleted,
+      biometricLockEnabled = snapshot.biometricLockEnabled,
       cards = snapshot.cards,
       recentExpenses = snapshot.recentExpenses,
       _monthExpenses = snapshot.monthExpenses,
@@ -63,6 +64,7 @@ class FinanceStore extends ChangeNotifier {
     List<CreditCardAccount>? cards,
     this.themePreference = 'system',
     this.onboardingCompleted = false,
+    this.biometricLockEnabled = false,
     FinanceDatabase? database,
     Clock? clock,
     @visibleForTesting List<Expense>? monthExpenses,
@@ -81,6 +83,7 @@ class FinanceStore extends ChangeNotifier {
   int startingBalance;
   String themePreference;
   bool onboardingCompleted;
+  bool biometricLockEnabled;
   final List<CreditCardAccount> cards;
   final List<Expense> recentExpenses;
   final List<Expense> _monthExpenses;

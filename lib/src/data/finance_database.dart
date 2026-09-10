@@ -5,6 +5,7 @@ class DatabaseSnapshot {
     required this.startingBalance,
     required this.themePreference,
     required this.onboardingCompleted,
+    required this.biometricLockEnabled,
     required this.cards,
     required this.recentExpenses,
     required this.monthExpenses,
@@ -17,6 +18,7 @@ class DatabaseSnapshot {
   final int startingBalance;
   final String themePreference;
   final bool onboardingCompleted;
+  final bool biometricLockEnabled;
   final List<CreditCardAccount> cards;
   final List<Expense> recentExpenses;
   final List<Expense> monthExpenses;

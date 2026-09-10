@@ -28,6 +28,7 @@ extension FinanceStoreBackup on FinanceStore {
         'locale': 'ar',
         'theme': themePreference,
         'onboardingCompleted': onboardingCompleted,
+        'biometricLockEnabled': biometricLockEnabled,
       },
     });
   }
@@ -50,6 +51,7 @@ extension FinanceStoreBackup on FinanceStore {
     final settings = decoded['settings'];
     final theme = settings is Map ? settings['theme'] : null;
     final onboarding = settings is Map ? settings['onboardingCompleted'] : null;
+    final biometric = settings is Map ? settings['biometricLockEnabled'] : null;
     final store = FinanceStore(
       startingBalance: poundsToPiastres(balance),
       themePreference:
@@ -60,6 +62,7 @@ extension FinanceStoreBackup on FinanceStore {
       onboardingCompleted: onboarding == null
           ? true
           : onboarding == true || onboarding == '1',
+      biometricLockEnabled: biometric == true || biometric == '1',
       clock: clock,
     );
 
@@ -112,6 +115,7 @@ extension FinanceStoreBackup on FinanceStore {
       startingBalance: imported.startingBalance,
       themePreference: imported.themePreference,
       onboardingCompleted: imported.onboardingCompleted,
+      biometricLockEnabled: imported.biometricLockEnabled,
       recentExpenses: imported.recentExpenses,
       monthExpenses: imported.monthExpenses.toList(),
       monthPayments: imported.monthPayments.toList(),

@@ -36,6 +36,7 @@ class FakeDatabase implements FinanceDatabase {
       startingBalance: int.tryParse(settings['starting_balance'] ?? '0') ?? 0,
       themePreference: settings['theme'] ?? 'system',
       onboardingCompleted: settings['onboarding_completed'] == '1',
+      biometricLockEnabled: settings['biometric_lock_enabled'] == '1',
       recentExpenses: List.of(expenses.take(5)),
       monthExpenses: List.of(
         expenses.where(
@@ -115,6 +116,9 @@ class FakeDatabase implements FinanceDatabase {
       ..addAll(snapshot.monthPayments);
     settings['theme'] = snapshot.themePreference;
     settings['onboarding_completed'] = snapshot.onboardingCompleted ? '1' : '0';
+    settings['biometric_lock_enabled'] = snapshot.biometricLockEnabled
+        ? '1'
+        : '0';
     settings['starting_balance'] = '${snapshot.startingBalance}';
   }
 

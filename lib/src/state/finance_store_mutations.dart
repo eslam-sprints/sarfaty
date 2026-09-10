@@ -253,4 +253,13 @@ extension FinanceStoreMutations on FinanceStore {
     onboardingCompleted = false;
     notifyListeners();
   }
+
+  Future<void> setBiometricLockEnabled(bool enabled) async {
+    await _write(
+      _database?.saveSetting('biometric_lock_enabled', enabled ? '1' : '0'),
+      'تعذر حفظ إعداد قفل التطبيق. حاول مرة أخرى.',
+    );
+    biometricLockEnabled = enabled;
+    notifyListeners();
+  }
 }

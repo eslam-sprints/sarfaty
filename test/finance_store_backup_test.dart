@@ -5,6 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'helpers/fake_database.dart';
 
 void main() {
+  test('biometric lock preference is preserved in backups', () async {
+    final store = FinanceStore(startingBalance: 0);
+    await store.setBiometricLockEnabled(true);
+
+    final restored = FinanceStore.fromBackupJson(await store.exportJson());
+
+    expect(restored.biometricLockEnabled, isTrue);
+  });
+
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test('backup round-trip preserves all data', () async {

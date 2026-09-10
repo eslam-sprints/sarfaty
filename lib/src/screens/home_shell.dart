@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../state/finance_store.dart';
+import '../security/biometric_auth.dart';
 import 'add_expense_screen.dart';
 import 'cards_screen.dart';
 import 'dashboard_screen.dart';
@@ -7,8 +8,13 @@ import 'summary_screen.dart';
 import 'settings_screen.dart';
 
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.store});
+  const HomeShell({
+    super.key,
+    required this.store,
+    required this.biometricAuthenticator,
+  });
   final FinanceStore store;
+  final BiometricAuthenticator biometricAuthenticator;
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -26,7 +32,10 @@ class _HomeShellState extends State<HomeShell> {
             DashboardScreen(store: widget.store, onAdd: _add),
             CardsScreen(store: widget.store),
             SummaryScreen(store: widget.store),
-            SettingsScreen(store: widget.store),
+            SettingsScreen(
+              store: widget.store,
+              biometricAuthenticator: widget.biometricAuthenticator,
+            ),
           ],
         ),
       ),

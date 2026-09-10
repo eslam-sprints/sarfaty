@@ -51,6 +51,10 @@ class DatabaseSchema {
     await db.insert('settings', {'key': 'starting_balance', 'value': '0'});
     await db.insert('settings', {'key': 'theme', 'value': 'system'});
     await db.insert('settings', {'key': 'onboarding_completed', 'value': '0'});
+    await db.insert('settings', {
+      'key': 'biometric_lock_enabled',
+      'value': '0',
+    });
   }
 
   /// Safe v1 (REAL pounds) → v2 (INTEGER piastres) migration.

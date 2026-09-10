@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
+import 'security/biometric_auth.dart';
+import 'security/biometric_gate.dart';
 import 'screens/home_shell.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/splash_screen.dart';
 import 'state/finance_store.dart';
 
 class SarfatyApp extends StatefulWidget {
-  const SarfatyApp({super.key, this.store, this.storeLoader})
-    : assert(
-        store != null || storeLoader != null,
-        'Provide store or storeLoader',
-      );
+  const SarfatyApp({
+    super.key,
+    this.store,
+    this.storeLoader,
+    this.biometricAuthenticator,
+  }) : assert(
+         store != null || storeLoader != null,
+         'Provide store or storeLoader',
+       );
 
   /// Ready store (tests / preloaded). Skips the transitional splash.
   final FinanceStore? store;
 
   /// Loads while [SplashScreen] is shown (production bootstrap).
   final Future<FinanceStore> Function()? storeLoader;
+  final BiometricAuthenticator? biometricAuthenticator;
 
   @override
   State<SarfatyApp> createState() => _SarfatyAppState();
@@ -25,10 +32,13 @@ class _SarfatyAppState extends State<SarfatyApp> {
   FinanceStore? _store;
   Object? _loadError;
   var _loading = false;
+  late final BiometricAuthenticator _biometricAuthenticator;
 
   @override
   void initState() {
     super.initState();
+    _biometricAuthenticator =
+        widget.biometricAuthenticator ?? DeviceBiometricAuthenticator();
     _store = widget.store;
     if (_store == null) {
       _loading = true;
@@ -134,7 +144,18 @@ class _SarfatyAppState extends State<SarfatyApp> {
         builder: (context, child) =>
             Directionality(textDirection: TextDirection.rtl, child: child!),
         home: store.onboardingCompleted
-            ? HomeShell(store: store)
+            ? store.biometricLockEnabled
+                  ? BiometricGate(
+                      authenticator: _biometricAuthenticator,
+                      child: HomeShell(
+                        store: store,
+                        biometricAuthenticator: _biometricAuthenticator,
+                      ),
+                    )
+                  : HomeShell(
+                      store: store,
+                      biometricAuthenticator: _biometricAuthenticator,
+                    )
             : OnboardingScreen(store: store),
       ),
     );

@@ -89,6 +89,7 @@ class LocalDatabase implements FinanceDatabase {
       startingBalance: _parsePiastresSetting(settings['starting_balance']),
       themePreference: settings['theme'] ?? 'system',
       onboardingCompleted: settings['onboarding_completed'] == '1',
+      biometricLockEnabled: settings['biometric_lock_enabled'] == '1',
       cards: cardRows.map(_cardFromRow).toList(),
       recentExpenses: recentExpenseRows.map(_expenseFromRow).toList(),
       monthExpenses: monthExpenseRows.map(_expenseFromRow).toList(),
@@ -164,6 +165,10 @@ class LocalDatabase implements FinanceDatabase {
       await txn.insert('settings', {
         'key': 'onboarding_completed',
         'value': snapshot.onboardingCompleted ? '1' : '0',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('settings', {
+        'key': 'biometric_lock_enabled',
+        'value': snapshot.biometricLockEnabled ? '1' : '0',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
