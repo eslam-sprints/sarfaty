@@ -7,6 +7,7 @@ class FakeDatabase implements FinanceDatabase {
   bool failWrites;
   int writeCount = 0;
   final List<Expense> expenses = [];
+  final List<CustomExpenseCategory> customCategories = [];
   final List<CreditCardAccount> cards = [];
   final List<PaymentRecord> payments = [];
   final Map<String, String> settings = {};
@@ -35,8 +36,11 @@ class FakeDatabase implements FinanceDatabase {
     return DatabaseSnapshot(
       startingBalance: int.tryParse(settings['starting_balance'] ?? '0') ?? 0,
       themePreference: settings['theme'] ?? 'system',
+      languagePreference: settings['language'] ?? 'ar',
       onboardingCompleted: settings['onboarding_completed'] == '1',
       biometricLockEnabled: settings['biometric_lock_enabled'] == '1',
+      expenseRemindersEnabled: settings['expense_reminders_enabled'] == '1',
+      customCategories: List.of(customCategories),
       recentExpenses: List.of(expenses.take(5)),
       monthExpenses: List.of(
         expenses.where(
@@ -69,6 +73,12 @@ class FakeDatabase implements FinanceDatabase {
     } else {
       expenses[index] = expense;
     }
+  }
+
+  @override
+  Future<void> insertCustomCategory(CustomExpenseCategory category) async {
+    await _maybeFail();
+    customCategories.add(category);
   }
 
   @override
@@ -108,6 +118,9 @@ class FakeDatabase implements FinanceDatabase {
     expenses
       ..clear()
       ..addAll(snapshot.monthExpenses);
+    customCategories
+      ..clear()
+      ..addAll(snapshot.customCategories);
     cards
       ..clear()
       ..addAll(snapshot.cards);
@@ -115,8 +128,12 @@ class FakeDatabase implements FinanceDatabase {
       ..clear()
       ..addAll(snapshot.monthPayments);
     settings['theme'] = snapshot.themePreference;
+    settings['language'] = snapshot.languagePreference;
     settings['onboarding_completed'] = snapshot.onboardingCompleted ? '1' : '0';
     settings['biometric_lock_enabled'] = snapshot.biometricLockEnabled
+        ? '1'
+        : '0';
+    settings['expense_reminders_enabled'] = snapshot.expenseRemindersEnabled
         ? '1'
         : '0';
     settings['starting_balance'] = '${snapshot.startingBalance}';

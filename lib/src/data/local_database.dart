@@ -19,10 +19,13 @@ class LocalDatabase implements FinanceDatabase {
       path,
       version: DatabaseSchema.schemaVersion,
       onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
-      onCreate: (db, _) => DatabaseSchema.createV2Schema(db),
+      onCreate: (db, _) => DatabaseSchema.createCurrentSchema(db),
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await DatabaseSchema.migrateV1RealToV2Piastres(db);
+        }
+        if (oldVersion < 3) {
+          await DatabaseSchema.migrateV2ToV3CustomCategories(db);
         }
       },
     );
@@ -40,6 +43,16 @@ class LocalDatabase implements FinanceDatabase {
         row['key'] as String: row['value'] as String,
     };
     final cardRows = await _db.query('cards');
+    final customCategoryRows = await _db.query(
+      'custom_categories',
+      orderBy: 'name COLLATE NOCASE',
+    );
+    final customCategories = customCategoryRows
+        .map(_customCategoryFromRow)
+        .toList();
+    final customCategoryNames = {
+      for (final category in customCategories) category.id: category.name,
+    };
 
     final recentExpenseRows = await _db.query(
       'expenses',
@@ -88,11 +101,18 @@ class LocalDatabase implements FinanceDatabase {
     return DatabaseSnapshot(
       startingBalance: _parsePiastresSetting(settings['starting_balance']),
       themePreference: settings['theme'] ?? 'system',
+      languagePreference: settings['language'] ?? 'ar',
       onboardingCompleted: settings['onboarding_completed'] == '1',
       biometricLockEnabled: settings['biometric_lock_enabled'] == '1',
+      expenseRemindersEnabled: settings['expense_reminders_enabled'] == '1',
+      customCategories: customCategories,
       cards: cardRows.map(_cardFromRow).toList(),
-      recentExpenses: recentExpenseRows.map(_expenseFromRow).toList(),
-      monthExpenses: monthExpenseRows.map(_expenseFromRow).toList(),
+      recentExpenses: recentExpenseRows
+          .map((row) => _expenseFromRow(row, customCategoryNames))
+          .toList(),
+      monthExpenses: monthExpenseRows
+          .map((row) => _expenseFromRow(row, customCategoryNames))
+          .toList(),
       monthPayments: monthPaymentRows.map(_paymentFromRow).toList(),
       cardExpensesTotal: cardExpensesTotal,
       allPaymentsTotal: allPaymentsTotal,
@@ -105,6 +125,14 @@ class LocalDatabase implements FinanceDatabase {
     _expenseRow(expense),
     conflictAlgorithm: ConflictAlgorithm.replace,
   );
+
+  @override
+  Future<void> insertCustomCategory(CustomExpenseCategory category) =>
+      _db.insert('custom_categories', {
+        'id': category.id,
+        'name': category.name,
+        'normalized_name': _normalizeCategoryName(category.name),
+      });
 
   @override
   Future<void> deleteExpense(String id) =>
@@ -144,7 +172,15 @@ class LocalDatabase implements FinanceDatabase {
     await _db.transaction((txn) async {
       await txn.delete('payments');
       await txn.delete('expenses');
+      await txn.delete('custom_categories');
       await txn.delete('cards');
+      for (final category in snapshot.customCategories) {
+        await txn.insert('custom_categories', {
+          'id': category.id,
+          'name': category.name,
+          'normalized_name': _normalizeCategoryName(category.name),
+        });
+      }
       for (final card in snapshot.cards) {
         await txn.insert('cards', _cardRow(card));
       }
@@ -163,12 +199,20 @@ class LocalDatabase implements FinanceDatabase {
         'value': snapshot.themePreference,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.insert('settings', {
+        'key': 'language',
+        'value': snapshot.languagePreference,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('settings', {
         'key': 'onboarding_completed',
         'value': snapshot.onboardingCompleted ? '1' : '0',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await txn.insert('settings', {
         'key': 'biometric_lock_enabled',
         'value': snapshot.biometricLockEnabled ? '1' : '0',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert('settings', {
+        'key': 'expense_reminders_enabled',
+        'value': snapshot.expenseRemindersEnabled ? '1' : '0',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
   }
@@ -196,9 +240,13 @@ class LocalDatabase implements FinanceDatabase {
     'expense_date': encodeLocalDateToUtcMs(expense.date),
     'card_id': expense.cardId,
     'note': expense.note,
+    'custom_category_id': expense.customCategoryId,
   };
 
-  static Expense _expenseFromRow(Map<String, Object?> row) => Expense(
+  static Expense _expenseFromRow(
+    Map<String, Object?> row,
+    Map<String, String> customCategoryNames,
+  ) => Expense(
     id: row['id'] as String,
     amount: _piastresFromRow(row['amount']),
     category: ExpenseCategory.values.byName(row['category'] as String),
@@ -206,7 +254,20 @@ class LocalDatabase implements FinanceDatabase {
     date: decodeLocalDateFromUtcMs(row['expense_date'] as int),
     cardId: row['card_id'] as String?,
     note: row['note'] as String?,
+    customCategoryId: row['custom_category_id'] as String?,
+    customCategoryName:
+        customCategoryNames[row['custom_category_id'] as String?],
   );
+
+  static CustomExpenseCategory _customCategoryFromRow(
+    Map<String, Object?> row,
+  ) => CustomExpenseCategory(
+    id: row['id'] as String,
+    name: row['name'] as String,
+  );
+
+  static String _normalizeCategoryName(String name) =>
+      name.trim().toLowerCase();
 
   static Map<String, Object?> _cardRow(CreditCardAccount card) => {
     'id': card.id,
@@ -246,6 +307,11 @@ class LocalDatabase implements FinanceDatabase {
   Future<TransactionPage> getTransactions(TransactionFilter filter) async {
     final conditions = <String>[];
     final args = <Object?>[];
+    final customCategoryRows = await _db.query('custom_categories');
+    final customCategoryNames = {
+      for (final row in customCategoryRows)
+        row['id'] as String: row['name'] as String,
+    };
 
     if (filter.method != null) {
       conditions.add('payment_method = ?');
@@ -254,6 +320,11 @@ class LocalDatabase implements FinanceDatabase {
     if (filter.category != null) {
       conditions.add('category = ?');
       args.add(filter.category!.name);
+      conditions.add('custom_category_id IS NULL');
+    }
+    if (filter.customCategoryId != null) {
+      conditions.add('custom_category_id = ?');
+      args.add(filter.customCategoryId);
     }
     if (filter.cardId != null) {
       conditions.add('card_id = ?');
@@ -270,15 +341,17 @@ class LocalDatabase implements FinanceDatabase {
         : 'WHERE ${conditions.join(' AND ')}';
 
     final includePayments =
-        filter.category == null && filter.method != PaymentMethod.cash;
+        filter.category == null &&
+        filter.customCategoryId == null &&
+        filter.method != PaymentMethod.cash;
 
     final expenseQuery = '''
-      SELECT id, amount, category, payment_method, expense_date as date, card_id, note, 'expense' as type
+      SELECT id, amount, category, custom_category_id, payment_method, expense_date as date, card_id, note, 'expense' as type
       FROM expenses
     ''';
 
     final paymentQuery = '''
-      SELECT CAST(id AS TEXT) as id, amount, NULL as category, NULL as payment_method, payment_date as date, card_id, NULL as note, 'payment' as type
+      SELECT CAST(id AS TEXT) as id, amount, NULL as category, NULL as custom_category_id, NULL as payment_method, payment_date as date, card_id, NULL as note, 'payment' as type
       FROM payments
     ''';
 
@@ -321,6 +394,10 @@ class LocalDatabase implements FinanceDatabase {
             date: decodeLocalDateFromUtcMs(row['date'] as int),
             cardId: row['card_id'] as String?,
             note: row['note'] as String?,
+            customCategoryId: row['custom_category_id'] as String?,
+            customCategoryName: row['custom_category_id'] == null
+                ? null
+                : customCategoryNames[row['custom_category_id'] as String],
           ),
         );
       } else {

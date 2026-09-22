@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sarfaty/src/security/biometric_auth.dart';
 import 'package:sarfaty/src/security/biometric_gate.dart';
@@ -29,6 +30,9 @@ void main() {
     final authenticator = _FakeAuthenticator(false);
     await tester.pumpWidget(
       MaterialApp(
+        locale: const Locale('ar'),
+        supportedLocales: const [Locale('ar'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         home: BiometricGate(
           authenticator: authenticator,
           child: const Text('بيانات محمية'),

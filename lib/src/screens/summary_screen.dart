@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
+import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
 
@@ -13,33 +15,42 @@ class SummaryScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
         Text(
-          'ملخص الشهر',
+          'ملخص الشهر'.tr(context, 'Monthly summary'),
           style: Theme.of(
             context,
           ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
         ),
         const SizedBox(height: 6),
         Text(
-          'نظرة سريعة على نمط مصروفاتك',
+          'نظرة سريعة على نمط مصروفاتك'.tr(
+            context,
+            'A quick look at your spending pattern',
+          ),
           style: TextStyle(
             color: Theme.of(context).colorScheme.onSurfaceVariant,
           ),
         ),
         const SizedBox(height: 20),
         MetricCard(
-          label: 'إجمالي الصرف',
-          value: money(total),
+          label: 'إجمالي الصرف'.tr(context, 'Total spending'),
+          value: money(context, total),
           icon: Icons.trending_down_rounded,
         ),
         MetricCard(
-          label: 'أعلى تصنيف',
-          value: store.topCategory?.label ?? 'لا يوجد',
+          label: 'أعلى تصنيف'.tr(context, 'Top category'),
+          value:
+              store.topCustomCategoryName ??
+              store.topCategory?.labelFor(context) ??
+              'لا يوجد'.tr(context, 'None'),
           icon: store.topCategory?.icon ?? Icons.category_outlined,
           tint: store.topCategory?.color ?? Colors.grey,
         ),
         MetricCard(
-          label: 'سداد البطاقات هذا الشهر',
-          value: money(store.monthlyPayments),
+          label: 'سداد البطاقات هذا الشهر'.tr(
+            context,
+            'Card payments this month',
+          ),
+          value: money(context, store.monthlyPayments),
           icon: Icons.credit_score_rounded,
           tint: const Color(0xFF0369A1),
         ),
@@ -51,21 +62,21 @@ class SummaryScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'طرق الدفع',
+                  'طرق الدفع'.tr(context, 'Payment methods'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 18),
                 _PaymentLine(
-                  label: 'كاش',
+                  label: PaymentMethod.cash.labelFor(context),
                   value: store.cashTotal,
                   ratio: cashRatio,
                   color: const Color(0xFF0D9488),
                 ),
                 const SizedBox(height: 18),
                 _PaymentLine(
-                  label: 'كريديت',
+                  label: PaymentMethod.credit.labelFor(context),
                   value: store.creditTotal,
                   ratio: 1 - cashRatio,
                   color: const Color(0xFF7C3AED),
@@ -77,15 +88,21 @@ class SummaryScreen extends StatelessWidget {
         const SizedBox(height: 12),
         Card(
           color: Theme.of(context).colorScheme.secondaryContainer,
-          child: const Padding(
-            padding: EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFEA580C)),
-                SizedBox(width: 10),
+                const Icon(
+                  Icons.lightbulb_outline_rounded,
+                  color: Color(0xFFEA580C),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'البيانات محفوظة محلياً بشكل دائم. يمكنك تصدير نسخة احتياطية من شاشة الإعدادات.',
+                    'البيانات محفوظة محلياً بشكل دائم. يمكنك تصدير نسخة احتياطية من شاشة الإعدادات.'.tr(
+                      context,
+                      'Your data is stored locally. Export a backup from Settings at any time.',
+                    ),
                   ),
                 ),
               ],
@@ -116,7 +133,7 @@ class _PaymentLine extends StatelessWidget {
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
           Text(
-            money(value),
+            money(context, value),
             style: const TextStyle(fontWeight: FontWeight.w900),
           ),
         ],

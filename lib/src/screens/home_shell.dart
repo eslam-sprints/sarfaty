@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../state/finance_store.dart';
 import '../security/biometric_auth.dart';
+import '../l10n/app_strings.dart';
+import '../notifications/expense_reminder_service.dart';
 import 'add_expense_screen.dart';
 import 'cards_screen.dart';
 import 'dashboard_screen.dart';
@@ -12,9 +14,11 @@ class HomeShell extends StatefulWidget {
     super.key,
     required this.store,
     required this.biometricAuthenticator,
+    required this.reminderService,
   });
   final FinanceStore store;
   final BiometricAuthenticator biometricAuthenticator;
+  final ExpenseReminderService reminderService;
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -35,6 +39,7 @@ class _HomeShellState extends State<HomeShell> {
             SettingsScreen(
               store: widget.store,
               biometricAuthenticator: widget.biometricAuthenticator,
+              reminderService: widget.reminderService,
             ),
           ],
         ),
@@ -42,26 +47,26 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'الرئيسية',
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home_rounded),
+            label: 'الرئيسية'.tr(context, 'Home'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.credit_card_outlined),
-            selectedIcon: Icon(Icons.credit_card_rounded),
-            label: 'بطاقاتي',
+            icon: const Icon(Icons.credit_card_outlined),
+            selectedIcon: const Icon(Icons.account_balance_wallet_rounded),
+            label: 'المحفظة'.tr(context, 'Wallet'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.pie_chart_outline),
-            selectedIcon: Icon(Icons.pie_chart_rounded),
-            label: 'الملخص',
+            icon: const Icon(Icons.pie_chart_outline),
+            selectedIcon: const Icon(Icons.pie_chart_rounded),
+            label: 'الملخص'.tr(context, 'Summary'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings_rounded),
-            label: 'الإعدادات',
+            icon: const Icon(Icons.settings_outlined),
+            selectedIcon: const Icon(Icons.settings_rounded),
+            label: 'الإعدادات'.tr(context, 'Settings'),
           ),
         ],
       ),
@@ -69,7 +74,7 @@ class _HomeShellState extends State<HomeShell> {
           ? FloatingActionButton.extended(
               onPressed: _add,
               icon: const Icon(Icons.add),
-              label: const Text('إضافة مصروف'),
+              label: Text('إضافة مصروف'.tr(context, 'Add expense')),
             )
           : null,
     ),

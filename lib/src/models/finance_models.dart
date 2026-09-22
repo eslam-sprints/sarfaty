@@ -23,6 +23,21 @@ enum ExpenseCategory {
   final Color color;
 }
 
+class CustomExpenseCategory {
+  const CustomExpenseCategory({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  Map<String, Object?> toJson() => {'id': id, 'name': name};
+
+  factory CustomExpenseCategory.fromJson(Map<String, dynamic> json) =>
+      CustomExpenseCategory(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
+}
+
 class Expense {
   Expense({
     required this.id,
@@ -32,6 +47,8 @@ class Expense {
     required this.date,
     this.cardId,
     this.note,
+    this.customCategoryId,
+    this.customCategoryName,
   });
   final String id;
 
@@ -44,6 +61,10 @@ class Expense {
   final DateTime date;
   final String? cardId;
   final String? note;
+  final String? customCategoryId;
+
+  /// Resolved from the normalized categories table; never stored on expenses.
+  final String? customCategoryName;
 
   /// JSON keeps pound decimals for schemaVersion 1 compatibility.
   /// Expense [date] is date-only `YYYY-MM-DD`, not an instant.
@@ -55,8 +76,12 @@ class Expense {
     'date': encodeLocalDateToJson(date),
     'cardId': cardId,
     'note': note,
+    if (customCategoryId != null) 'customCategoryId': customCategoryId,
   };
-  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
+  factory Expense.fromJson(
+    Map<String, dynamic> json, {
+    Map<String, String> customCategoryNames = const {},
+  }) => Expense(
     id: json['id'] as String,
     amount: poundsToPiastres(json['amount'] as num),
     category: ExpenseCategory.values.byName(json['category'] as String),
@@ -64,6 +89,9 @@ class Expense {
     date: decodeLocalDateFromJson(json['date'] as String),
     cardId: json['cardId'] as String?,
     note: json['note'] as String?,
+    customCategoryId: json['customCategoryId'] as String?,
+    customCategoryName:
+        customCategoryNames[json['customCategoryId'] as String?],
   );
 }
 
@@ -170,6 +198,7 @@ class TransactionFilter {
   const TransactionFilter({
     this.method,
     this.category,
+    this.customCategoryId,
     this.cardId,
     this.period,
     this.offset = 0,
@@ -177,6 +206,7 @@ class TransactionFilter {
   });
   final PaymentMethod? method;
   final ExpenseCategory? category;
+  final String? customCategoryId;
   final String? cardId;
   final DateTimeRange? period;
   final int offset;

@@ -45,6 +45,111 @@ void main() {
     expect(store.cashTotal, poundsToPiastres(125));
   });
 
+  test('updating starting balance persists and recalculates balance', () async {
+    final db = FakeDatabase();
+    final store = FinanceStore(
+      startingBalance: 0,
+      database: db,
+      clock: () => DateTime(2026, 9, 15, 12),
+    );
+    await store.addExpense(
+      amount: 125,
+      category: ExpenseCategory.food,
+      method: PaymentMethod.cash,
+      date: DateTime(2026, 9, 15),
+    );
+
+    expect(await store.setStartingBalance(1000), isTrue);
+    expect(db.settings['starting_balance'], '${poundsToPiastres(1000)}');
+    expect(store.availableBalance, poundsToPiastres(875));
+    expect(await store.setStartingBalance(-1), isFalse);
+  });
+
+  test('updating language persists before changing memory', () async {
+    final db = FakeDatabase();
+    final store = FinanceStore(startingBalance: 0, database: db);
+
+    await store.setLanguagePreference('en');
+
+    expect(db.settings['language'], 'en');
+    expect(store.languagePreference, 'en');
+
+    db.failWrites = true;
+    await expectLater(
+      store.setLanguagePreference('ar'),
+      throwsA(isA<PersistenceException>()),
+    );
+    expect(store.languagePreference, 'en');
+  });
+
+  test('expense reminder preference is persisted', () async {
+    final db = FakeDatabase();
+    final store = FinanceStore(startingBalance: 0, database: db);
+
+    await store.setExpenseRemindersEnabled(true);
+
+    expect(store.expenseRemindersEnabled, isTrue);
+    expect(db.settings['expense_reminders_enabled'], '1');
+  });
+
+  test('custom category rejects empty and duplicate names', () async {
+    final db = FakeDatabase();
+    final store = FinanceStore(startingBalance: 0, database: db);
+
+    await expectLater(
+      store.addCustomCategory('   '),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'اسم التصنيف مطلوب',
+        ),
+      ),
+    );
+    final category = await store.addCustomCategory('بنزين');
+
+    expect(category.name, 'بنزين');
+    expect(db.customCategories.single.name, 'بنزين');
+    await expectLater(
+      store.addCustomCategory('  بنزين  '),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'هذا التصنيف موجود بالفعل',
+        ),
+      ),
+    );
+    await expectLater(
+      store.addCustomCategory('فواتير'),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('custom category is attached without becoming an enum value', () async {
+    final db = FakeDatabase();
+    final store = FinanceStore(
+      startingBalance: poundsToPiastres(100),
+      database: db,
+      clock: () => DateTime(2026, 9, 15, 12),
+    );
+    final category = await store.addCustomCategory('بنزين');
+
+    await store.addExpense(
+      amount: 25,
+      category: ExpenseCategory.other,
+      customCategory: category,
+      method: PaymentMethod.cash,
+      date: DateTime(2026, 9, 15),
+    );
+
+    final expense = store.monthExpenses.single;
+    expect(expense.category, ExpenseCategory.other);
+    expect(expense.customCategoryId, category.id);
+    expect(expense.customCategoryName, 'بنزين');
+    expect(store.topCustomCategoryName, 'بنزين');
+  });
+
   test('credit expense increases card due without reducing balance', () async {
     final card = CreditCardAccount(
       id: 'c',

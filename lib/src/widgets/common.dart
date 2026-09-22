@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import '../data/money.dart';
 import '../data/time_codec.dart';
+import '../l10n/app_strings.dart';
 import '../models/finance_models.dart';
 
-/// Formats piastres for display as pounds (ج.م).
-String money(int piastres) {
+/// Formats piastres for display as Egyptian pounds.
+String money(BuildContext context, int piastres) {
   final value = piastresToPounds(piastres);
-  return '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} ج.م';
+  final currency = context.isArabic ? 'ج.م' : 'EGP';
+  return '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} $currency';
 }
 
 /// Displays a **date-only** value using the local calendar day.
@@ -81,17 +83,18 @@ class ExpenseTile extends StatelessWidget {
     title: Text(
       expense.note?.trim().isNotEmpty == true
           ? expense.note!
-          : expense.category.label,
+          : expense.categoryLabelFor(context),
       style: const TextStyle(fontWeight: FontWeight.w700),
     ),
     subtitle: Text(
-      '${expense.category.label} • ${expense.method == PaymentMethod.cash ? 'كاش' : 'كريديت'} • ${shortDate(expense.date)}',
+      '${expense.categoryLabelFor(context)} • '
+      '${expense.method.labelFor(context)} • ${shortDate(expense.date)}',
     ),
     trailing: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '- ${money(expense.amount)}',
+          '- ${money(context, expense.amount)}',
           style: const TextStyle(
             fontWeight: FontWeight.w800,
             color: Color(0xFFB42318),

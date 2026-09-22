@@ -9,6 +9,7 @@ extension FinanceStoreMutations on FinanceStore {
     required ExpenseCategory category,
     required PaymentMethod method,
     required DateTime date,
+    CustomExpenseCategory? customCategory,
     String? cardId,
     String? note,
   }) async {
@@ -20,6 +21,8 @@ extension FinanceStoreMutations on FinanceStore {
       date: localDateOnly(date),
       cardId: cardId,
       note: note,
+      customCategoryId: customCategory?.id,
+      customCategoryName: customCategory?.name,
     );
 
     // Optimistic update
@@ -63,6 +66,7 @@ extension FinanceStoreMutations on FinanceStore {
     required ExpenseCategory category,
     required PaymentMethod method,
     required DateTime date,
+    CustomExpenseCategory? customCategory,
     String? cardId,
     String? note,
   }) async {
@@ -74,6 +78,8 @@ extension FinanceStoreMutations on FinanceStore {
       date: localDateOnly(date),
       cardId: method == PaymentMethod.credit ? cardId : null,
       note: note,
+      customCategoryId: customCategory?.id,
+      customCategoryName: customCategory?.name,
     );
 
     // Optimistic update
@@ -235,6 +241,30 @@ extension FinanceStoreMutations on FinanceStore {
     notifyListeners();
   }
 
+  Future<void> setLanguagePreference(String value) async {
+    if (!{'ar', 'en'}.contains(value)) return;
+    await _write(
+      _database?.saveSetting('language', value),
+      'تعذر حفظ اللغة. حاول مرة أخرى.',
+    );
+    languagePreference = value;
+    notifyListeners();
+  }
+
+  /// [amount] is in pounds (UI input); stored as piastres.
+  Future<bool> setStartingBalance(double amount) async {
+    final amountPiastres = poundsToPiastres(amount);
+    if (amountPiastres < 0) return false;
+    await _write(
+      _database?.saveSetting('starting_balance', '$amountPiastres'),
+      'تعذر حفظ الرصيد. حاول مرة أخرى.',
+    );
+    startingBalance = amountPiastres;
+    _calculateAggregates();
+    notifyListeners();
+    return true;
+  }
+
   Future<void> completeOnboarding() async {
     if (onboardingCompleted) return;
     await _write(
@@ -260,6 +290,15 @@ extension FinanceStoreMutations on FinanceStore {
       'تعذر حفظ إعداد قفل التطبيق. حاول مرة أخرى.',
     );
     biometricLockEnabled = enabled;
+    notifyListeners();
+  }
+
+  Future<void> setExpenseRemindersEnabled(bool enabled) async {
+    await _write(
+      _database?.saveSetting('expense_reminders_enabled', enabled ? '1' : '0'),
+      'تعذر حفظ إعداد التذكيرات. حاول مرة أخرى.',
+    );
+    expenseRemindersEnabled = enabled;
     notifyListeners();
   }
 }

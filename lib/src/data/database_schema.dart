@@ -3,7 +3,13 @@ import 'money.dart';
 
 class DatabaseSchema {
   /// Current on-disk schema. v1 used REAL pounds; v2 uses INTEGER piastres.
-  static const int schemaVersion = 2;
+  /// v3 adds normalized custom expense categories.
+  static const int schemaVersion = 3;
+
+  static Future<void> createCurrentSchema(DatabaseExecutor db) async {
+    await createV2Schema(db);
+    await migrateV2ToV3CustomCategories(db);
+  }
 
   static Future<void> createV2Schema(DatabaseExecutor db) async {
     await db.execute('''
@@ -53,6 +59,10 @@ class DatabaseSchema {
     await db.insert('settings', {'key': 'onboarding_completed', 'value': '0'});
     await db.insert('settings', {
       'key': 'biometric_lock_enabled',
+      'value': '0',
+    });
+    await db.insert('settings', {
+      'key': 'expense_reminders_enabled',
       'value': '0',
     });
   }
@@ -168,5 +178,24 @@ class DatabaseSchema {
       rethrow;
     }
     await db.execute('PRAGMA foreign_keys = ON');
+  }
+
+  /// Additive v2 -> v3 migration. Existing category enum values stay intact.
+  static Future<void> migrateV2ToV3CustomCategories(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE custom_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        normalized_name TEXT NOT NULL UNIQUE
+      )
+    ''');
+    await db.execute('''
+      ALTER TABLE expenses ADD COLUMN custom_category_id TEXT
+        REFERENCES custom_categories(id) ON DELETE RESTRICT
+    ''');
+    await db.execute(
+      'CREATE INDEX expenses_custom_category_idx '
+      'ON expenses(custom_category_id)',
+    );
   }
 }

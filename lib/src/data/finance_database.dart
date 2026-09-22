@@ -4,8 +4,11 @@ class DatabaseSnapshot {
   const DatabaseSnapshot({
     required this.startingBalance,
     required this.themePreference,
+    this.languagePreference = 'ar',
     required this.onboardingCompleted,
     required this.biometricLockEnabled,
+    this.expenseRemindersEnabled = false,
+    this.customCategories = const [],
     required this.cards,
     required this.recentExpenses,
     required this.monthExpenses,
@@ -17,8 +20,11 @@ class DatabaseSnapshot {
   /// Starting balance in piastres.
   final int startingBalance;
   final String themePreference;
+  final String languagePreference;
   final bool onboardingCompleted;
   final bool biometricLockEnabled;
+  final bool expenseRemindersEnabled;
+  final List<CustomExpenseCategory> customCategories;
   final List<CreditCardAccount> cards;
   final List<Expense> recentExpenses;
   final List<Expense> monthExpenses;
@@ -34,6 +40,7 @@ abstract class FinanceDatabase {
     required DateTime monthEnd,
   });
   Future<void> upsertExpense(Expense expense);
+  Future<void> insertCustomCategory(CustomExpenseCategory category);
   Future<void> deleteExpense(String id);
   Future<void> insertCard(CreditCardAccount card);
   Future<void> recordPayment(CreditCardAccount card, PaymentRecord payment);

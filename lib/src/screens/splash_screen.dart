@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
+
 /// Short transitional screen shown while local data (SQLite) initializes.
 /// Matches the native Android launch theme colors and branding.
 class SplashScreen extends StatelessWidget {
@@ -33,7 +35,7 @@ class SplashScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'صرفتي',
+                  'صرفتي'.tr(context, 'Sarfaty'),
                   style: textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: scheme.onSurface,
@@ -42,7 +44,10 @@ class SplashScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'إدارة مصروفاتك ببساطة',
+                  'إدارة مصروفاتك ببساطة'.tr(
+                    context,
+                    'Manage your expenses simply',
+                  ),
                   style: textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -51,7 +56,10 @@ class SplashScreen extends StatelessWidget {
                 const SizedBox(height: 36),
                 if (error != null) ...[
                   Text(
-                    'تعذّر تحميل البيانات المحلية',
+                    'تعذّر تحميل البيانات المحلية'.tr(
+                      context,
+                      'Could not load local data',
+                    ),
                     style: textTheme.bodyMedium?.copyWith(color: scheme.error),
                     textAlign: TextAlign.center,
                   ),
@@ -59,7 +67,7 @@ class SplashScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     FilledButton(
                       onPressed: onRetry,
-                      child: const Text('إعادة المحاولة'),
+                      child: Text('إعادة المحاولة'.tr(context, 'Try again')),
                     ),
                   ],
                 ] else

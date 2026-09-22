@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import 'biometric_auth.dart';
 
 class BiometricGate extends StatefulWidget {
@@ -94,14 +95,22 @@ class _BiometricGateState extends State<BiometricGate>
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'صرفتي مقفول',
+                  'صرفتي مقفول'.tr(context, 'Sarfaty is locked'),
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  _message ?? 'استخدم البصمة أو قفل الجهاز لعرض بياناتك.',
+                  _message == null
+                      ? 'استخدم البصمة أو قفل الجهاز لعرض بياناتك.'.tr(
+                          context,
+                          'Use biometrics or your device lock to view your data.',
+                        )
+                      : _message!.tr(
+                          context,
+                          'Authentication failed. Try again.',
+                        ),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: colors.onSurfaceVariant),
                 ),
@@ -114,7 +123,11 @@ class _BiometricGateState extends State<BiometricGate>
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.lock_open_rounded),
-                  label: Text(_authenticating ? 'جاري التحقق…' : 'فتح بالبصمة'),
+                  label: Text(
+                    _authenticating
+                        ? 'جاري التحقق…'.tr(context, 'Authenticating…')
+                        : 'فتح بالبصمة'.tr(context, 'Unlock'),
+                  ),
                 ),
               ],
             ),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'notifications/expense_reminder_service.dart';
 import 'security/biometric_auth.dart';
 import 'security/biometric_gate.dart';
 import 'screens/home_shell.dart';
@@ -12,6 +14,7 @@ class SarfatyApp extends StatefulWidget {
     this.store,
     this.storeLoader,
     this.biometricAuthenticator,
+    this.reminderService = const DisabledExpenseReminderService(),
   }) : assert(
          store != null || storeLoader != null,
          'Provide store or storeLoader',
@@ -23,6 +26,7 @@ class SarfatyApp extends StatefulWidget {
   /// Loads while [SplashScreen] is shown (production bootstrap).
   final Future<FinanceStore> Function()? storeLoader;
   final BiometricAuthenticator? biometricAuthenticator;
+  final ExpenseReminderService reminderService;
 
   @override
   State<SarfatyApp> createState() => _SarfatyAppState();
@@ -57,6 +61,7 @@ class _SarfatyAppState extends State<SarfatyApp> {
   Future<void> _load() async {
     try {
       final store = await widget.storeLoader!();
+      await _syncReminders(store);
       if (!mounted) return;
       setState(() {
         _store = store;
@@ -69,6 +74,23 @@ class _SarfatyAppState extends State<SarfatyApp> {
         _loadError = error;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _syncReminders(FinanceStore store) async {
+    if (!store.expenseRemindersEnabled) return;
+    try {
+      await widget.reminderService.ensureScheduled(
+        languageCode: store.languagePreference,
+      );
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          context: ErrorDescription('while restoring expense reminders'),
+        ),
+      );
     }
   }
 
@@ -116,11 +138,11 @@ class _SarfatyAppState extends State<SarfatyApp> {
         title: 'صرفتي',
         debugShowCheckedModeBanner: false,
         locale: const Locale('ar'),
+        supportedLocales: const [Locale('ar'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: theme,
         darkTheme: darkTheme,
         themeMode: ThemeMode.system,
-        builder: (context, child) =>
-            Directionality(textDirection: TextDirection.rtl, child: child!),
         home: SplashScreen(
           error: _loadError,
           onRetry: _loadError != null && !_loading ? _bootstrap : null,
@@ -133,7 +155,9 @@ class _SarfatyAppState extends State<SarfatyApp> {
       builder: (context, _) => MaterialApp(
         title: 'صرفتي',
         debugShowCheckedModeBanner: false,
-        locale: const Locale('ar'),
+        locale: Locale(store.languagePreference),
+        supportedLocales: const [Locale('ar'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: theme,
         darkTheme: darkTheme,
         themeMode: switch (store.themePreference) {
@@ -141,8 +165,6 @@ class _SarfatyAppState extends State<SarfatyApp> {
           'dark' => ThemeMode.dark,
           _ => ThemeMode.system,
         },
-        builder: (context, child) =>
-            Directionality(textDirection: TextDirection.rtl, child: child!),
         home: store.onboardingCompleted
             ? store.biometricLockEnabled
                   ? BiometricGate(
@@ -150,11 +172,13 @@ class _SarfatyAppState extends State<SarfatyApp> {
                       child: HomeShell(
                         store: store,
                         biometricAuthenticator: _biometricAuthenticator,
+                        reminderService: widget.reminderService,
                       ),
                     )
                   : HomeShell(
                       store: store,
                       biometricAuthenticator: _biometricAuthenticator,
+                      reminderService: widget.reminderService,
                     )
             : OnboardingScreen(store: store),
       ),

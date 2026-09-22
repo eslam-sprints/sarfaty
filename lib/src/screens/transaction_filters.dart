@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
@@ -20,11 +21,11 @@ class TransactionFilters extends StatelessWidget {
 
   final FinanceStore store;
   final PaymentMethod? method;
-  final ExpenseCategory? category;
+  final String? category;
   final String? cardId;
   final DateTimeRange? period;
   final ValueChanged<PaymentMethod?> onMethodChanged;
-  final ValueChanged<ExpenseCategory?> onCategoryChanged;
+  final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<String?> onCardIdChanged;
   final ValueChanged<DateTimeRange?> onPeriodChanged;
   final VoidCallback onClear;
@@ -38,25 +39,43 @@ class TransactionFilters extends StatelessWidget {
         children: [
           DropdownButton<PaymentMethod?>(
             value: method,
-            hint: const Text('طريقة الدفع: الكل'),
-            items: const [
-              DropdownMenuItem(value: null, child: Text('الكل')),
-              DropdownMenuItem(value: PaymentMethod.cash, child: Text('كاش')),
+            hint: Text('طريقة الدفع: الكل'.tr(context, 'Payment method: All')),
+            items: [
+              DropdownMenuItem(
+                value: null,
+                child: Text('الكل'.tr(context, 'All')),
+              ),
+              DropdownMenuItem(
+                value: PaymentMethod.cash,
+                child: Text(PaymentMethod.cash.labelFor(context)),
+              ),
               DropdownMenuItem(
                 value: PaymentMethod.credit,
-                child: Text('كريديت'),
+                child: Text(PaymentMethod.credit.labelFor(context)),
               ),
             ],
             onChanged: onMethodChanged,
           ),
           const SizedBox(width: 14),
-          DropdownButton<ExpenseCategory?>(
+          DropdownButton<String?>(
             value: category,
-            hint: const Text('كل التصنيفات'),
+            hint: Text('كل التصنيفات'.tr(context, 'All categories')),
             items: [
-              const DropdownMenuItem(value: null, child: Text('كل التصنيفات')),
+              DropdownMenuItem(
+                value: null,
+                child: Text('كل التصنيفات'.tr(context, 'All categories')),
+              ),
               ...ExpenseCategory.values.map(
-                (c) => DropdownMenuItem(value: c, child: Text(c.label)),
+                (c) => DropdownMenuItem(
+                  value: c.name,
+                  child: Text(c.labelFor(context)),
+                ),
+              ),
+              ...store.customCategories.map(
+                (category) => DropdownMenuItem(
+                  value: category.id,
+                  child: Text(category.name),
+                ),
               ),
             ],
             onChanged: onCategoryChanged,
@@ -65,9 +84,12 @@ class TransactionFilters extends StatelessWidget {
             const SizedBox(width: 14),
             DropdownButton<String?>(
               value: cardId,
-              hint: const Text('كل البطاقات'),
+              hint: Text('كل البطاقات'.tr(context, 'All cards')),
               items: [
-                const DropdownMenuItem(value: null, child: Text('كل البطاقات')),
+                DropdownMenuItem(
+                  value: null,
+                  child: Text('كل البطاقات'.tr(context, 'All cards')),
+                ),
                 ...store.cards.map(
                   (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
                 ),
@@ -89,7 +111,7 @@ class TransactionFilters extends StatelessWidget {
             icon: const Icon(Icons.date_range_outlined),
             label: Text(
               period == null
-                  ? 'كل التواريخ'
+                  ? 'كل التواريخ'.tr(context, 'All dates')
                   : '${shortDate(period!.start)} — ${shortDate(period!.end)}',
             ),
           ),
@@ -99,7 +121,7 @@ class TransactionFilters extends StatelessWidget {
               period != null)
             IconButton(
               onPressed: onClear,
-              tooltip: 'مسح الفلاتر',
+              tooltip: 'مسح الفلاتر'.tr(context, 'Clear filters'),
               icon: const Icon(Icons.filter_alt_off_outlined),
             ),
         ],

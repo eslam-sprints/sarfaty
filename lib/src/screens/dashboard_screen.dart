@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/time_codec.dart';
+import '../l10n/app_strings.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
 import 'transactions_screen.dart';
@@ -41,12 +42,15 @@ class DashboardScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'أهلاً بك في صرفتي',
+                          'أهلاً بك في صرفتي'.tr(context, 'Welcome to Sarfaty'),
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         Text(
-                          'خلّي فلوسك أوضح وأسهل',
+                          'خلّي فلوسك أوضح وأسهل'.tr(
+                            context,
+                            'Make your money clearer and easier',
+                          ),
                           style: TextStyle(
                             color: Theme.of(
                               context,
@@ -70,13 +74,13 @@ class DashboardScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'إجمالي مصروفات الشهر',
-                      style: TextStyle(color: Colors.white70),
+                    Text(
+                      'إجمالي مصروفات الشهر'.tr(context, 'Monthly expenses'),
+                      style: const TextStyle(color: Colors.white70),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      money(store.monthlyTotal),
+                      money(context, store.monthlyTotal),
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(
                             color: Colors.white,
@@ -88,15 +92,18 @@ class DashboardScreen extends StatelessWidget {
                       children: [
                         Expanded(
                           child: _WhiteStat(
-                            label: 'الرصيد المتاح',
-                            value: money(store.availableBalance),
+                            label: 'الرصيد المتاح'.tr(
+                              context,
+                              'Available balance',
+                            ),
+                            value: money(context, store.availableBalance),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: _WhiteStat(
-                            label: 'مستحق الكريديت',
-                            value: money(store.totalCreditDue),
+                            label: 'مستحق الكريديت'.tr(context, 'Credit due'),
+                            value: money(context, store.totalCreditDue),
                           ),
                         ),
                       ],
@@ -112,9 +119,9 @@ class DashboardScreen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
                         icon: const Icon(Icons.add_rounded),
-                        label: const Text(
-                          'سجّل مصروف جديد',
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                        label: Text(
+                          'سجّل مصروف جديد'.tr(context, 'Add a new expense'),
+                          style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),
@@ -144,7 +151,7 @@ class DashboardScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'أقرب موعد سداد',
+                              'أقرب موعد سداد'.tr(context, 'Next payment due'),
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(
                                     color: Theme.of(
@@ -155,7 +162,10 @@ class DashboardScreen extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               dueDate == null
-                                  ? 'لا توجد مستحقات حاليًا'
+                                  ? 'لا توجد مستحقات حاليًا'.tr(
+                                      context,
+                                      'No payments are currently due',
+                                    )
                                   : '${shortDate(dueDate)} • ${dueCard!.name}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -179,8 +189,10 @@ class DashboardScreen extends StatelessWidget {
                           ),
                           child: Text(
                             daysUntilDue <= 0
-                                ? 'اليوم'
-                                : 'خلال $daysUntilDue يوم',
+                                ? 'اليوم'.tr(context, 'Today')
+                                : context.isArabic
+                                ? 'خلال $daysUntilDue يوم'
+                                : 'In $daysUntilDue days',
                             style: Theme.of(context).textTheme.labelMedium
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),
@@ -194,7 +206,7 @@ class DashboardScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'آخر العمليات',
+                    'آخر العمليات'.tr(context, 'Recent transactions'),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -206,7 +218,7 @@ class DashboardScreen extends StatelessWidget {
                         builder: (_) => TransactionsScreen(store: store),
                       ),
                     ),
-                    child: const Text('عرض الكل'),
+                    child: Text('عرض الكل'.tr(context, 'View all')),
                   ),
                 ],
               ),
@@ -229,12 +241,22 @@ class DashboardScreen extends StatelessWidget {
                                 ).colorScheme.onSurfaceVariant,
                               ),
                               const SizedBox(height: 10),
-                              const Text('لا توجد عمليات بعد'),
+                              Text(
+                                'لا توجد عمليات بعد'.tr(
+                                  context,
+                                  'No transactions yet',
+                                ),
+                              ),
                               const SizedBox(height: 8),
                               TextButton.icon(
                                 onPressed: onAdd,
                                 icon: const Icon(Icons.add_rounded),
-                                label: const Text('أضف أول مصروف'),
+                                label: Text(
+                                  'أضف أول مصروف'.tr(
+                                    context,
+                                    'Add your first expense',
+                                  ),
+                                ),
                               ),
                             ],
                           ),

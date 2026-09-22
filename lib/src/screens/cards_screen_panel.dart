@@ -41,14 +41,24 @@ class _CardPanel extends StatelessWidget {
             const SizedBox(height: 18),
             Row(
               children: [
-                Expanded(child: _LabelValue('المستخدم', money(due))),
                 Expanded(
                   child: _LabelValue(
-                    'المتبقي',
-                    money((card.limit - due).clamp(0, card.limit)),
+                    'المستخدم'.tr(context, 'Used'),
+                    money(context, due),
                   ),
                 ),
-                Expanded(child: _LabelValue('الحد', money(card.limit))),
+                Expanded(
+                  child: _LabelValue(
+                    'المتبقي'.tr(context, 'Remaining'),
+                    money(context, (card.limit - due).clamp(0, card.limit)),
+                  ),
+                ),
+                Expanded(
+                  child: _LabelValue(
+                    'الحد'.tr(context, 'Limit'),
+                    money(context, card.limit),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -61,7 +71,9 @@ class _CardPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'استخدام ${(usage * 100).round()}% من الحد',
+              context.isArabic
+                  ? 'استخدام ${(usage * 100).round()}% من الحد'
+                  : '${(usage * 100).round()}% of limit used',
               style: TextStyle(color: alertColor, fontWeight: FontWeight.w700),
             ),
             const Divider(height: 28),
@@ -72,11 +84,13 @@ class _CardPanel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'المطلوب سداده: ${money(due)}',
+                        '${'المطلوب سداده'.tr(context, 'Amount due')}: ${money(context, due)}',
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                       Text(
-                        'موعد السداد ${shortDate(store.nextDueDate(card))} • بعد $days يوم',
+                        context.isArabic
+                            ? 'موعد السداد ${shortDate(store.nextDueDate(card))} • بعد $days يوم'
+                            : 'Due ${shortDate(store.nextDueDate(card))} • in $days days',
                         style: TextStyle(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -86,7 +100,7 @@ class _CardPanel extends StatelessWidget {
                 ),
                 FilledButton.tonal(
                   onPressed: due <= 0 ? null : () => _showPayment(context, due),
-                  child: const Text('سددت البطاقة'),
+                  child: Text('سددت البطاقة'.tr(context, 'Record payment')),
                 ),
               ],
             ),
@@ -109,10 +123,19 @@ class _CardPanel extends StatelessWidget {
                     Expanded(
                       child: Text(
                         usage >= .9
-                            ? 'تنبيه: تجاوز استخدام البطاقة 90%'
+                            ? 'تنبيه: تجاوز استخدام البطاقة 90%'.tr(
+                                context,
+                                'Alert: card usage exceeded 90%',
+                              )
                             : usage >= .7
-                            ? 'تنبيه: تجاوز استخدام البطاقة 70%'
-                            : 'تذكير: موعد السداد خلال 7 أيام',
+                            ? 'تنبيه: تجاوز استخدام البطاقة 70%'.tr(
+                                context,
+                                'Alert: card usage exceeded 70%',
+                              )
+                            : 'تذكير: موعد السداد خلال 7 أيام'.tr(
+                                context,
+                                'Reminder: payment is due within 7 days',
+                              ),
                         style: TextStyle(
                           color: alertColor,
                           fontWeight: FontWeight.w700,
@@ -143,16 +166,19 @@ class _CardPanel extends StatelessWidget {
         SnackBar(
           content: Text(
             ok
-                ? 'تم تسجيل سداد ${money(poundsToPiastres(amount))}'
-                : 'تعذر السداد؛ تحقق من الرصيد والمبلغ',
+                ? '${'تم تسجيل سداد'.tr(context, 'Payment recorded')}: ${money(context, poundsToPiastres(amount))}'
+                : 'تعذر السداد؛ تحقق من الرصيد والمبلغ'.tr(
+                    context,
+                    'Payment failed; check the balance and amount',
+                  ),
           ),
         ),
       );
     } on PersistenceException catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message.localizedError(context))),
+      );
     }
   }
 }

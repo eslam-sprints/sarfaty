@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sarfaty/src/models/finance_models.dart';
 import 'package:sarfaty/src/state/finance_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,6 +14,27 @@ void main() {
 
     expect(restored.biometricLockEnabled, isTrue);
   });
+
+  test('expense reminder preference is preserved in backups', () async {
+    final store = FinanceStore(startingBalance: 0);
+    await store.setExpenseRemindersEnabled(true);
+
+    final restored = FinanceStore.fromBackupJson(await store.exportJson());
+
+    expect(restored.expenseRemindersEnabled, isTrue);
+  });
+
+  test(
+    'language preference is preserved and legacy backups default to Arabic',
+    () async {
+      final store = FinanceStore(startingBalance: 0);
+      await store.setLanguagePreference('en');
+
+      final restored = FinanceStore.fromBackupJson(await store.exportJson());
+
+      expect(restored.languagePreference, 'en');
+    },
+  );
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -104,7 +126,34 @@ void main() {
 ''';
     final restored = FinanceStore.fromBackupJson(legacy);
     expect(restored.onboardingCompleted, isTrue);
+    expect(restored.languagePreference, 'ar');
+    expect(restored.customCategories, isEmpty);
+    expect(restored.expenseRemindersEnabled, isFalse);
   });
+
+  test(
+    'backup round-trip preserves custom categories and references',
+    () async {
+      final original = FinanceStore(
+        startingBalance: 0,
+        clock: () => DateTime(2026, 9, 15, 12),
+      );
+      final category = await original.addCustomCategory('بنزين');
+      await original.addExpense(
+        amount: 100,
+        category: ExpenseCategory.other,
+        customCategory: category,
+        method: PaymentMethod.cash,
+        date: DateTime(2026, 9, 15),
+      );
+
+      final restored = FinanceStore.fromBackupJson(await original.exportJson());
+
+      expect(restored.customCategories.single.name, 'بنزين');
+      expect(restored.monthExpenses.single.customCategoryId, category.id);
+      expect(restored.monthExpenses.single.customCategoryName, 'بنزين');
+    },
+  );
 
   test('failed setting write does not flip onboarding flag', () async {
     final db = FakeDatabase(failWrites: true);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
@@ -15,7 +16,7 @@ class TransactionsScreen extends StatefulWidget {
 
 class _TransactionsScreenState extends State<TransactionsScreen> {
   PaymentMethod? method;
-  ExpenseCategory? category;
+  String? category;
   String? cardId;
   DateTimeRange? period;
 
@@ -65,7 +66,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       final page = await widget.store.getTransactions(
         TransactionFilter(
           method: method,
-          category: category,
+          category: _builtInCategory,
+          customCategoryId: _customCategoryId,
           cardId: cardId,
           period: period,
           offset: 0,
@@ -98,7 +100,8 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       final page = await widget.store.getTransactions(
         TransactionFilter(
           method: method,
-          category: category,
+          category: _builtInCategory,
+          customCategoryId: _customCategoryId,
           cardId: cardId,
           period: period,
           offset: _items.length,
@@ -127,9 +130,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     _loadInitial();
   }
 
+  ExpenseCategory? get _builtInCategory {
+    if (category == null) return null;
+    return ExpenseCategory.values
+        .where((item) => item.name == category)
+        .firstOrNull;
+  }
+
+  String? get _customCategoryId => _builtInCategory == null ? category : null;
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('كل المصروفات')),
+    appBar: AppBar(title: Text('كل المصروفات'.tr(context, 'All expenses'))),
     body: Column(
       children: [
         TransactionFilters(
@@ -158,15 +170,15 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             children: [
               Expanded(
                 child: MetricCard(
-                  label: 'إجمالي النتائج',
-                  value: money(_totalAmount),
+                  label: 'إجمالي النتائج'.tr(context, 'Results total'),
+                  value: money(context, _totalAmount),
                   icon: Icons.summarize_outlined,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: MetricCard(
-                  label: 'عدد النتائج',
+                  label: 'عدد النتائج'.tr(context, 'Result count'),
                   value: '$_totalCount',
                   icon: Icons.numbers_rounded,
                   tint: const Color(0xFF7C3AED),
@@ -188,30 +200,38 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        _error!,
+                        _error!.tr(
+                          context,
+                          _error == 'تعذر تحميل البيانات'
+                              ? 'Could not load data'
+                              : 'Could not load more data',
+                        ),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       TextButton(
                         onPressed: _loadInitial,
-                        child: const Text('إعادة المحاولة'),
+                        child: Text('إعادة المحاولة'.tr(context, 'Try again')),
                       ),
                     ],
                   ),
                 )
               : _items.isEmpty && !_isLoading
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.search_off_rounded,
                         size: 54,
                         color: Colors.black26,
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Text(
-                        'لا توجد معاملات تطابق الفلاتر',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        'لا توجد معاملات تطابق الفلاتر'.tr(
+                          context,
+                          'No transactions match the filters',
+                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
@@ -229,7 +249,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                           child: _error != null
                               ? TextButton(
                                   onPressed: _loadMore,
-                                  child: const Text('إعادة المحاولة'),
+                                  child: Text(
+                                    'إعادة المحاولة'.tr(context, 'Try again'),
+                                  ),
                                 )
                               : const CircularProgressIndicator(),
                         ),
@@ -260,18 +282,20 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('حذف المصروف؟'),
+        title: Text('حذف المصروف؟'.tr(context, 'Delete expense?')),
         content: Text(
-          'سيتم حذف ${money(expense.amount)} وتحديث الرصيد والملخص تلقائيًا.',
+          context.isArabic
+              ? 'سيتم حذف ${money(context, expense.amount)} وتحديث الرصيد والملخص تلقائيًا.'
+              : '${money(context, expense.amount)} will be deleted and totals updated automatically.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
+            child: Text('إلغاء'.tr(context, 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('حذف'),
+            child: Text('حذف'.tr(context, 'Delete')),
           ),
         ],
       ),
@@ -281,14 +305,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       await widget.store.deleteExpense(expense.id);
     } on PersistenceException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message.localizedError(context))),
+      );
       return;
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('تم حذف المصروف وتحديث البيانات')),
+      SnackBar(
+        content: Text(
+          'تم حذف المصروف وتحديث البيانات'.tr(
+            context,
+            'Expense deleted and data updated',
+          ),
+        ),
+      ),
     );
   }
 }

@@ -46,8 +46,11 @@ class FinanceStore extends ChangeNotifier {
     Clock clock,
   ) : startingBalance = snapshot.startingBalance,
       themePreference = snapshot.themePreference,
+      languagePreference = snapshot.languagePreference,
       onboardingCompleted = snapshot.onboardingCompleted,
       biometricLockEnabled = snapshot.biometricLockEnabled,
+      expenseRemindersEnabled = snapshot.expenseRemindersEnabled,
+      customCategories = snapshot.customCategories,
       cards = snapshot.cards,
       recentExpenses = snapshot.recentExpenses,
       _monthExpenses = snapshot.monthExpenses,
@@ -63,13 +66,17 @@ class FinanceStore extends ChangeNotifier {
     required this.startingBalance,
     List<CreditCardAccount>? cards,
     this.themePreference = 'system',
+    this.languagePreference = 'ar',
     this.onboardingCompleted = false,
     this.biometricLockEnabled = false,
+    this.expenseRemindersEnabled = false,
     FinanceDatabase? database,
     Clock? clock,
+    List<CustomExpenseCategory>? customCategories,
     @visibleForTesting List<Expense>? monthExpenses,
     @visibleForTesting List<PaymentRecord>? monthPayments,
   }) : cards = cards ?? [],
+       customCategories = customCategories ?? [],
        recentExpenses = [],
        _monthExpenses = monthExpenses ?? [],
        _monthPayments = monthPayments ?? [],
@@ -82,8 +89,11 @@ class FinanceStore extends ChangeNotifier {
 
   int startingBalance;
   String themePreference;
+  String languagePreference;
   bool onboardingCompleted;
   bool biometricLockEnabled;
+  bool expenseRemindersEnabled;
+  final List<CustomExpenseCategory> customCategories;
   final List<CreditCardAccount> cards;
   final List<Expense> recentExpenses;
   final List<Expense> _monthExpenses;
@@ -108,6 +118,7 @@ class FinanceStore extends ChangeNotifier {
   int monthlyPayments = 0;
   int availableBalance = 0;
   ExpenseCategory? topCategory;
+  String? topCustomCategoryName;
 
   void _calculateAggregates() {
     monthlyTotal = _monthExpenses.fold(0, (sum, e) => sum + e.amount);
@@ -125,14 +136,22 @@ class FinanceStore extends ChangeNotifier {
 
     if (_monthExpenses.isEmpty) {
       topCategory = null;
+      topCustomCategoryName = null;
     } else {
-      final totals = <ExpenseCategory, int>{};
+      final totals = <String, int>{};
       for (final e in _monthExpenses) {
-        totals[e.category] = (totals[e.category] ?? 0) + e.amount;
+        final key = e.customCategoryId ?? e.category.name;
+        totals[key] = (totals[key] ?? 0) + e.amount;
       }
-      topCategory = totals.entries
+      final topKey = totals.entries
           .reduce((a, b) => a.value >= b.value ? a : b)
           .key;
+      final topExpense = _monthExpenses.firstWhere(
+        (expense) =>
+            (expense.customCategoryId ?? expense.category.name) == topKey,
+      );
+      topCategory = topExpense.category;
+      topCustomCategoryName = topExpense.customCategoryName;
     }
   }
 
@@ -184,12 +203,64 @@ class FinanceStore extends ChangeNotifier {
     _monthPayments
       ..clear()
       ..addAll(snapshot.monthPayments);
+    customCategories
+      ..clear()
+      ..addAll(snapshot.customCategories);
     cardExpensesTotal
       ..clear()
       ..addAll(snapshot.cardExpensesTotal);
     allPaymentsTotal = snapshot.allPaymentsTotal;
+    languagePreference = snapshot.languagePreference;
+    expenseRemindersEnabled = snapshot.expenseRemindersEnabled;
     _calculateAggregates();
     notifyListeners();
+  }
+
+  Future<CustomExpenseCategory> addCustomCategory(String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty) {
+      throw const FormatException('اسم التصنيف مطلوب');
+    }
+    if (name.length > 40) {
+      throw const FormatException('اسم التصنيف طويل جداً');
+    }
+    final normalized = name.toLowerCase();
+    final builtInNames = {
+      ...ExpenseCategory.values.map((category) => category.label.toLowerCase()),
+      'food & drinks',
+      'transport',
+      'bills',
+      'shopping',
+      'entertainment',
+      'health',
+      'home',
+      'education',
+      'transfers',
+      'other',
+    };
+    final duplicate =
+        builtInNames.contains(normalized) ||
+        customCategories.any(
+          (category) => category.name.trim().toLowerCase() == normalized,
+        );
+    if (duplicate) {
+      throw const FormatException('هذا التصنيف موجود بالفعل');
+    }
+    final category = CustomExpenseCategory(
+      id: 'custom_${now.microsecondsSinceEpoch}',
+      name: name,
+    );
+    await _write(
+      _database?.insertCustomCategory(category),
+      'تعذر حفظ التصنيف. حاول مرة أخرى.',
+    );
+    customCategories.add(category);
+    customCategories.sort(
+      (first, second) =>
+          first.name.toLowerCase().compareTo(second.name.toLowerCase()),
+    );
+    notifyListeners();
+    return category;
   }
 
   Future<void> _write(Future<void>? persistence, String message) async {

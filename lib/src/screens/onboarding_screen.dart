@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../state/finance_store.dart';
 
 class _OnboardingPage {
@@ -65,9 +66,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await widget.store.completeOnboarding();
     } on PersistenceException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message.localizedError(context))),
+      );
     }
   }
 
@@ -97,7 +98,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   onPressed: _finish,
-                  child: const Text('تخطّي'),
+                  child: Text('تخطّي'.tr(context, 'Skip')),
                 ),
               ),
               Expanded(
@@ -144,7 +145,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
                   ),
                   child: Text(
-                    _isLast ? 'ابدأ' : 'التالي',
+                    _isLast
+                        ? 'ابدأ'.tr(context, 'Get started')
+                        : 'التالي'.tr(context, 'Next'),
                     style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
@@ -196,7 +199,7 @@ class _OnboardingPageView extends StatelessWidget {
         ),
         const SizedBox(height: 36),
         Text(
-          'صرفتي',
+          'صرفتي'.tr(context, 'Sarfaty'),
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: page.accent,
             fontWeight: FontWeight.w900,
@@ -205,7 +208,11 @@ class _OnboardingPageView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          page.title,
+          page.title.tr(context, switch (page.title) {
+            'تابع مصروفاتك بسهولة' => 'Track your expenses easily',
+            'أدِر بطاقات الكريديت' => 'Manage your credit cards',
+            _ => 'Your data stays on your device',
+          }),
           textAlign: TextAlign.center,
           style: Theme.of(
             context,
@@ -213,7 +220,14 @@ class _OnboardingPageView extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         Text(
-          page.body,
+          page.body.tr(context, switch (page.title) {
+            'تابع مصروفاتك بسهولة' =>
+              'Record daily cash or card expenses and see your monthly total at a glance.',
+            'أدِر بطاقات الكريديت' =>
+              'Add cards, monitor what is due, and record payments before the due date.',
+            _ =>
+              'All your data stays on your device. Export a backup from Settings at any time.',
+          }),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
             color: scheme.onSurfaceVariant,

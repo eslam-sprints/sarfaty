@@ -21,14 +21,16 @@ extension FinanceStoreBackup on FinanceStore {
       'exportedAt': encodeInstantToUtcIso(now),
       'startingBalance': piastresToPounds(startingBalance),
       'expenses': exportExpenses.map((e) => e.toJson()).toList(),
+      'customCategories': customCategories.map((c) => c.toJson()).toList(),
       'cards': cards.map((c) => c.toJson()).toList(),
       'payments': exportPayments.map((p) => p.toJson()).toList(),
       'settings': {
         'currency': 'EGP',
-        'locale': 'ar',
+        'locale': languagePreference,
         'theme': themePreference,
         'onboardingCompleted': onboardingCompleted,
         'biometricLockEnabled': biometricLockEnabled,
+        'expenseRemindersEnabled': expenseRemindersEnabled,
       },
     });
   }
@@ -42,6 +44,7 @@ extension FinanceStoreBackup on FinanceStore {
     final expenseData = decoded['expenses'];
     final cardData = decoded['cards'];
     final paymentData = decoded['payments'];
+    final customCategoryData = decoded['customCategories'];
     if (balance is! num ||
         expenseData is! List ||
         cardData is! List ||
@@ -50,19 +53,51 @@ extension FinanceStoreBackup on FinanceStore {
     }
     final settings = decoded['settings'];
     final theme = settings is Map ? settings['theme'] : null;
+    final language = settings is Map ? settings['locale'] : null;
     final onboarding = settings is Map ? settings['onboardingCompleted'] : null;
     final biometric = settings is Map ? settings['biometricLockEnabled'] : null;
+    final reminders = settings is Map
+        ? settings['expenseRemindersEnabled']
+        : null;
+    if (customCategoryData != null && customCategoryData is! List) {
+      throw const FormatException('بيانات النسخة الاحتياطية ناقصة');
+    }
+    final parsedCustomCategories = customCategoryData is List
+        ? customCategoryData
+              .map(
+                (entry) => CustomExpenseCategory.fromJson(
+                  Map<String, dynamic>.from(entry as Map),
+                ),
+              )
+              .toList()
+        : <CustomExpenseCategory>[];
+    final categoryIds = parsedCustomCategories.map((item) => item.id).toSet();
+    final categoryNames = parsedCustomCategories
+        .map((item) => item.name.trim().toLowerCase())
+        .toSet();
+    if (parsedCustomCategories.any(
+          (item) => item.id.isEmpty || item.name.trim().isEmpty,
+        ) ||
+        categoryIds.length != parsedCustomCategories.length ||
+        categoryNames.length != parsedCustomCategories.length) {
+      throw const FormatException('بيانات النسخة الاحتياطية ناقصة');
+    }
     final store = FinanceStore(
       startingBalance: poundsToPiastres(balance),
       themePreference:
           theme is String && {'system', 'light', 'dark'}.contains(theme)
           ? theme
           : 'system',
+      languagePreference: language is String && {'ar', 'en'}.contains(language)
+          ? language
+          : 'ar',
       // النسخ القديمة بلا المفتاح تُعامل كمكتملة حتى لا تُعاد المقدمة بعد الاستيراد.
       onboardingCompleted: onboarding == null
           ? true
           : onboarding == true || onboarding == '1',
       biometricLockEnabled: biometric == true || biometric == '1',
+      expenseRemindersEnabled: reminders == true || reminders == '1',
+      customCategories: parsedCustomCategories,
       clock: clock,
     );
 
@@ -73,8 +108,16 @@ extension FinanceStoreBackup on FinanceStore {
       ),
     );
 
+    final customCategoryNames = {
+      for (final category in store.customCategories) category.id: category.name,
+    };
     final importedExpenses = expenseData
-        .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+        .map(
+          (e) => Expense.fromJson(
+            Map<String, dynamic>.from(e as Map),
+            customCategoryNames: customCategoryNames,
+          ),
+        )
         .toList();
 
     final importedPayments = paymentData
@@ -98,6 +141,14 @@ extension FinanceStoreBackup on FinanceStore {
     store._calculateAggregates();
 
     final cardIds = store.cards.map((c) => c.id).toSet();
+    final customCategoryIds = store.customCategories.map((c) => c.id).toSet();
+    if (store._monthExpenses.any(
+      (expense) =>
+          expense.customCategoryId != null &&
+          !customCategoryIds.contains(expense.customCategoryId),
+    )) {
+      throw const FormatException('تحتوي النسخة على مراجع تصنيفات غير صحيحة');
+    }
     if (store._monthExpenses.any(
           (e) =>
               e.method == PaymentMethod.credit &&
@@ -114,8 +165,11 @@ extension FinanceStoreBackup on FinanceStore {
     final snapshot = DatabaseSnapshot(
       startingBalance: imported.startingBalance,
       themePreference: imported.themePreference,
+      languagePreference: imported.languagePreference,
       onboardingCompleted: imported.onboardingCompleted,
       biometricLockEnabled: imported.biometricLockEnabled,
+      expenseRemindersEnabled: imported.expenseRemindersEnabled,
+      customCategories: imported.customCategories,
       recentExpenses: imported.recentExpenses,
       monthExpenses: imported.monthExpenses.toList(),
       monthPayments: imported.monthPayments.toList(),

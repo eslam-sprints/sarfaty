@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../data/money.dart';
 import '../data/time_codec.dart';
+import '../l10n/app_strings.dart';
 import '../models/finance_models.dart';
 import '../state/finance_store.dart';
 import '../widgets/common.dart';
@@ -15,10 +16,12 @@ class AddExpenseScreen extends StatefulWidget {
 }
 
 class _AddExpenseScreenState extends State<AddExpenseScreen> {
+  static const _addCategoryValue = 'add';
   final formKey = GlobalKey<FormState>();
   final amount = TextEditingController();
   final note = TextEditingController();
   ExpenseCategory category = ExpenseCategory.food;
+  CustomExpenseCategory? customCategory;
   PaymentMethod method = PaymentMethod.cash;
   late DateTime date;
   String? cardId;
@@ -30,6 +33,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
       amount.text = formatPoundsForInput(expense.amount);
       note.text = expense.note ?? '';
       category = expense.category;
+      if (expense.customCategoryId != null) {
+        customCategory = widget.store.customCategories
+            .where((item) => item.id == expense.customCategoryId)
+            .firstOrNull;
+      }
       method = expense.method;
       date = localDateOnly(expense.date);
       cardId = expense.cardId;
@@ -51,7 +59,11 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(widget.expense == null ? 'إضافة مصروف' : 'تعديل المصروف'),
+      title: Text(
+        widget.expense == null
+            ? 'إضافة مصروف'.tr(context, 'Add expense')
+            : 'تعديل المصروف'.tr(context, 'Edit expense'),
+      ),
     ),
     body: Form(
       key: formKey,
@@ -65,51 +77,96 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
             ],
-            decoration: const InputDecoration(
-              labelText: 'المبلغ',
-              suffixText: 'ج.م',
-              prefixIcon: Icon(Icons.payments_outlined),
+            decoration: InputDecoration(
+              labelText: 'المبلغ'.tr(context, 'Amount'),
+              suffixText: context.isArabic ? 'ج.م' : 'EGP',
+              prefixIcon: const Icon(Icons.payments_outlined),
             ),
             validator: (v) {
               final n = double.tryParse(v ?? '');
-              return n == null || n <= 0 ? 'أدخل مبلغاً صحيحاً' : null;
+              return n == null || n <= 0
+                  ? 'أدخل مبلغاً صحيحاً'.tr(context, 'Enter a valid amount')
+                  : null;
             },
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<ExpenseCategory>(
-            initialValue: category,
-            decoration: const InputDecoration(
-              labelText: 'التصنيف',
-              prefixIcon: Icon(Icons.category_outlined),
+          DropdownButtonFormField<String>(
+            key: ValueKey(customCategory?.id ?? category.name),
+            initialValue: customCategory?.id ?? category.name,
+            decoration: InputDecoration(
+              labelText: 'التصنيف'.tr(context, 'Category'),
+              prefixIcon: const Icon(Icons.category_outlined),
             ),
-            items: ExpenseCategory.values
-                .map(
-                  (c) => DropdownMenuItem(
-                    value: c,
-                    child: Row(
-                      children: [
-                        Icon(c.icon, color: c.color, size: 20),
-                        const SizedBox(width: 8),
-                        Text(c.label),
-                      ],
-                    ),
+            items: [
+              ...ExpenseCategory.values.map(
+                (c) => DropdownMenuItem(
+                  value: c.name,
+                  child: Row(
+                    children: [
+                      Icon(c.icon, color: c.color, size: 20),
+                      const SizedBox(width: 8),
+                      Text(c.labelFor(context)),
+                    ],
                   ),
-                )
-                .toList(),
-            onChanged: (v) => setState(() => category = v!),
+                ),
+              ),
+              ...widget.store.customCategories.map(
+                (custom) => DropdownMenuItem(
+                  value: custom.id,
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.label_outline_rounded,
+                        color: Color(0xFF78716C),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(custom.name),
+                    ],
+                  ),
+                ),
+              ),
+              DropdownMenuItem(
+                value: _addCategoryValue,
+                child: Row(
+                  children: [
+                    const Icon(Icons.add_rounded, size: 20),
+                    const SizedBox(width: 8),
+                    Text('إضافة تصنيف جديد'.tr(context, 'Add new category')),
+                  ],
+                ),
+              ),
+            ],
+            onChanged: (value) async {
+              if (value == _addCategoryValue) {
+                await _addCustomCategory();
+                return;
+              }
+              final custom = widget.store.customCategories
+                  .where((item) => item.id == value)
+                  .firstOrNull;
+              setState(() {
+                customCategory = custom;
+                if (custom == null) {
+                  category = ExpenseCategory.values.byName(value!);
+                } else {
+                  category = ExpenseCategory.other;
+                }
+              });
+            },
           ),
           const SizedBox(height: 16),
           SegmentedButton<PaymentMethod>(
-            segments: const [
+            segments: [
               ButtonSegment(
                 value: PaymentMethod.cash,
-                label: Text('كاش'),
-                icon: Icon(Icons.account_balance_wallet_outlined),
+                label: Text(PaymentMethod.cash.labelFor(context)),
+                icon: const Icon(Icons.account_balance_wallet_outlined),
               ),
               ButtonSegment(
                 value: PaymentMethod.credit,
-                label: Text('كريديت'),
-                icon: Icon(Icons.credit_card_outlined),
+                label: Text(PaymentMethod.credit.labelFor(context)),
+                icon: const Icon(Icons.credit_card_outlined),
               ),
             ],
             selected: {method},
@@ -119,9 +176,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: cardId,
-              decoration: const InputDecoration(
-                labelText: 'البطاقة',
-                prefixIcon: Icon(Icons.credit_card),
+              decoration: InputDecoration(
+                labelText: 'البطاقة'.tr(context, 'Card'),
+                prefixIcon: const Icon(Icons.credit_card),
               ),
               items: widget.store.cards
                   .map(
@@ -129,8 +186,12 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   )
                   .toList(),
               onChanged: (v) => setState(() => cardId = v),
-              validator: (_) =>
-                  cardId == null ? 'أضف بطاقة أولاً من شاشة بطاقاتي' : null,
+              validator: (_) => cardId == null
+                  ? 'أضف بطاقة أولاً من شاشة بطاقاتي'.tr(
+                      context,
+                      'Add a card first from the Wallet screen',
+                    )
+                  : null,
             ),
           ],
           const SizedBox(height: 16),
@@ -140,7 +201,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               borderRadius: BorderRadius.circular(16),
             ),
             leading: const Icon(Icons.calendar_today_outlined),
-            title: const Text('التاريخ'),
+            title: Text('التاريخ'.tr(context, 'Date')),
             subtitle: Text(shortDate(date)),
             onTap: () async {
               final picked = await showDatePicker(
@@ -158,9 +219,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           TextFormField(
             controller: note,
             maxLength: 80,
-            decoration: const InputDecoration(
-              labelText: 'ملاحظة (اختياري)',
-              prefixIcon: Icon(Icons.notes_rounded),
+            decoration: InputDecoration(
+              labelText: 'ملاحظة (اختياري)'.tr(context, 'Note (optional)'),
+              prefixIcon: const Icon(Icons.notes_rounded),
             ),
           ),
           const SizedBox(height: 16),
@@ -171,7 +232,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
             onPressed: _save,
             icon: const Icon(Icons.check_rounded),
             label: Text(
-              widget.expense == null ? 'حفظ المصروف' : 'حفظ التعديلات',
+              widget.expense == null
+                  ? 'حفظ المصروف'.tr(context, 'Save expense')
+                  : 'حفظ التعديلات'.tr(context, 'Save changes'),
             ),
           ),
         ],
@@ -191,6 +254,7 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           date: date,
           cardId: method == PaymentMethod.credit ? cardId : null,
           note: noteValue,
+          customCategory: customCategory,
         );
       } else {
         await widget.store.updateExpense(
@@ -201,13 +265,14 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           date: date,
           cardId: method == PaymentMethod.credit ? cardId : null,
           note: noteValue,
+          customCategory: customCategory,
         );
       }
     } on PersistenceException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message.localizedError(context))),
+      );
       return;
     }
     if (!mounted) return;
@@ -215,9 +280,85 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          existing == null ? 'تمت إضافة المصروف' : 'تم تعديل المصروف',
+          existing == null
+              ? 'تمت إضافة المصروف'.tr(context, 'Expense added')
+              : 'تم تعديل المصروف'.tr(context, 'Expense updated'),
         ),
       ),
     );
+  }
+
+  Future<void> _addCustomCategory() async {
+    final controller = TextEditingController();
+    String? errorText;
+    final created = await showDialog<CustomExpenseCategory>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text('إضافة تصنيف جديد'.tr(context, 'Add new category')),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 40,
+            decoration: InputDecoration(
+              labelText: 'اسم التصنيف'.tr(context, 'Category name'),
+              hintText: 'مثال: بنزين'.tr(context, 'Example: Fuel'),
+              errorText: errorText?.localizedError(context),
+            ),
+            onSubmitted: (_) async {
+              final result = await _saveCustomCategory(
+                controller.text,
+                (message) => setDialogState(() => errorText = message),
+              );
+              if (result != null && dialogContext.mounted) {
+                Navigator.pop(dialogContext, result);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('إلغاء'.tr(context, 'Cancel')),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final result = await _saveCustomCategory(
+                  controller.text,
+                  (message) => setDialogState(() => errorText = message),
+                );
+                if (result != null && dialogContext.mounted) {
+                  Navigator.pop(dialogContext, result);
+                }
+              },
+              child: Text('حفظ'.tr(context, 'Save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (!mounted) return;
+    if (created == null) {
+      setState(() {});
+      return;
+    }
+    setState(() {
+      customCategory = created;
+      category = ExpenseCategory.other;
+    });
+  }
+
+  Future<CustomExpenseCategory?> _saveCustomCategory(
+    String name,
+    ValueChanged<String> showError,
+  ) async {
+    try {
+      return await widget.store.addCustomCategory(name);
+    } on FormatException catch (error) {
+      showError(error.message);
+    } on PersistenceException catch (error) {
+      showError(error.message);
+    }
+    return null;
   }
 }
